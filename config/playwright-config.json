@@ -1,0 +1,25 @@
+{
+  "browser": {
+    "browserName": "chromium",
+    "launchOptions": {
+      "channel": "chrome",
+      "headless": false,
+      "args": [
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-ipc-flooding-protection",
+        "--disable-hang-monitor",
+        "--disable-back-forward-cache",
+        "--disable-features=CalculateNativeWinOcclusion"
+      ]
+    },
+    "contextOptions": {
+      "viewport": { "width": 1280, "height": 720 }
+    }
+  },
+  "timeouts": {
+    "action": 10000,
+    "navigation": 120000
+  }
+}

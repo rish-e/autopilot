@@ -126,6 +126,7 @@ ok "Scripts installed"
 
 cp -f "$SOURCE_DIR/config/decision-framework.md" "$INSTALL_DIR/config/"
 cp -f "$SOURCE_DIR/config/trusted-mcps.yaml" "$INSTALL_DIR/config/"
+cp -f "$SOURCE_DIR/config/playwright-config.json" "$INSTALL_DIR/config/"
 ok "Config installed"
 
 # Only create custom rules file if it doesn't exist (preserve user additions)
@@ -233,6 +234,60 @@ PERMS
     ok "Smart permissions configured (new settings.local.json)"
 fi
 
+# ─── Configure Playwright MCP ─────────────────────────────────────────────────
+
+info "Configuring Playwright MCP for browser stability..."
+
+PLAYWRIGHT_CONFIG="$INSTALL_DIR/config/playwright-config.json"
+BROWSER_PROFILE="$INSTALL_DIR/browser-profile"
+CLAUDE_JSON="$HOME/.claude.json"
+
+# Create persistent browser profile directory
+mkdir -p "$BROWSER_PROFILE"
+ok "Browser profile directory: $BROWSER_PROFILE"
+
+# Configure Playwright MCP in Claude Code:
+#   --config points to our stability flags (no background throttling, longer timeouts)
+#   PLAYWRIGHT_MCP_USER_DATA_DIR env var sets the persistent profile (machine-specific path)
+if [ -f "$CLAUDE_JSON" ]; then
+    if jq -e '.mcpServers.playwright' "$CLAUDE_JSON" &>/dev/null; then
+        # Check if already using our config
+        CURRENT_ARGS=$(jq -r '.mcpServers.playwright.args // [] | join(" ")' "$CLAUDE_JSON")
+        if echo "$CURRENT_ARGS" | grep -q "playwright-config.json"; then
+            ok "Playwright MCP already using autopilot config"
+        else
+            # Append --config flag to existing args, set env var for profile dir
+            jq --arg config "$PLAYWRIGHT_CONFIG" --arg profile "$BROWSER_PROFILE" \
+                '.mcpServers.playwright.args = (.mcpServers.playwright.args + ["--config", $config]) | .mcpServers.playwright.env.PLAYWRIGHT_MCP_USER_DATA_DIR = $profile' \
+                "$CLAUDE_JSON" > "$CLAUDE_JSON.tmp" && mv "$CLAUDE_JSON.tmp" "$CLAUDE_JSON"
+            ok "Playwright MCP updated with stability config"
+        fi
+    else
+        # Add Playwright MCP with npx and our config
+        jq --arg config "$PLAYWRIGHT_CONFIG" --arg profile "$BROWSER_PROFILE" \
+            '.mcpServers.playwright = {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--config",$config],"env":{"PLAYWRIGHT_MCP_USER_DATA_DIR":$profile}}' \
+            "$CLAUDE_JSON" > "$CLAUDE_JSON.tmp" && mv "$CLAUDE_JSON.tmp" "$CLAUDE_JSON"
+        ok "Playwright MCP added with stability config"
+    fi
+else
+    # No .claude.json yet — create minimal one with Playwright
+    cat > "$CLAUDE_JSON" << CLAUDEJSON
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@playwright/mcp@latest", "--config", "$PLAYWRIGHT_CONFIG"],
+      "env": {
+        "PLAYWRIGHT_MCP_USER_DATA_DIR": "$BROWSER_PROFILE"
+      }
+    }
+  }
+}
+CLAUDEJSON
+    ok "Playwright MCP configured (new .claude.json)"
+fi
+
 # ─── Run Guardian Tests ────────────────────────────────────────────────────────
 
 info "Running guardian test suite..."
@@ -265,6 +320,7 @@ echo "    Agent:     $AGENT_DIR/autopilot.md"
 echo "    System:    $INSTALL_DIR/"
 echo "    Guardian:  Active (PreToolUse hook in settings.json)"
 echo "    Perms:     Bash auto-approved (guardian provides safety)"
+echo "    Browser:   Playwright optimized for stability (config in $INSTALL_DIR/config/)"
 echo ""
 echo "  First run:"
 echo "    The first time Autopilot needs a service, it will ask for"

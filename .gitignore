@@ -23,3 +23,7 @@ node_modules/
 # IDE
 .vscode/
 .idea/
+
+# Browser profile (persistent sessions, cookies — machine-specific)
+browser-profile/*
+!browser-profile/.gitkeep
