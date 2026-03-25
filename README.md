@@ -90,6 +90,12 @@ The 5 pre-built service files (Vercel, Supabase, GitHub, Cloudflare, Razorpay) a
 ### Fully Autonomous
 Autopilot acts first, asks only when the decision framework says to. It deploys code, configures databases, manages infrastructure, and obtains credentials — all without you leaving the terminal.
 
+### Plan → Confirm → Execute All
+For complex tasks, Autopilot presents a numbered plan, waits for a single "proceed", then executes every step end-to-end without pausing. Simple tasks just execute immediately. **The agent never stops to ask "what next?"** — once it starts, it runs to completion or until genuinely blocked.
+
+### Project-Local Execution Log
+Every action is automatically logged to `{project}/.autopilot/log.md` — timestamped, with decision level, service, and result. If something breaks at step 5 of 8, you open the log and see exactly what happened, where it failed, and what was supposed to come next. Especially useful for Level 1-2 actions that execute silently without asking.
+
 ### Browser-Based Credential Acquisition
 Need an API key? Autopilot opens Playwright, logs into the dashboard, navigates to the tokens page, creates one, copies it, stores it in Keychain. You provide your email and password once per service. Autopilot handles everything else.
 
@@ -194,6 +200,28 @@ claude --agent autopilot
 
 Autopilot figures out the rest. If it's a service it hasn't seen before, it researches the docs, creates a registry file, installs the CLI, and keeps going. First time with a service, it asks for your login credentials once. Every subsequent interaction is fully autonomous (except 2FA codes — those need your phone).
 
+### Execution Log
+
+Every action is automatically logged to your project:
+
+```
+your-project/.autopilot/log.md
+```
+
+```markdown
+## Session: 2026-03-25 14:05 — Set up Supabase and deploy to Vercel
+
+| # | Time | Action | Level | Service | Result |
+|---|------|--------|-------|---------|--------|
+| 1 | 14:05 | Installed Supabase CLI via brew | L1 | supabase | done |
+| 2 | 14:06 | Created project (ref: abc123) | L2 | supabase | done |
+| 3 | 14:07 | Ran migration: create users table | L2 | supabase | done |
+| 4 | 14:08 | Deployed to preview | L2 | vercel | done — https://myapp.vercel.app |
+| 5 | 14:09 | Set env vars | L2 | vercel | done |
+```
+
+If something breaks midway, open the log to see exactly what happened and where.
+
 ---
 
 ## What's Included
@@ -220,6 +248,10 @@ Autopilot figures out the rest. If it's a service it hasn't seen before, it rese
     razorpay.md           # Razorpay: payments, subscriptions, webhooks
   agent/
     autopilot.md          # The agent definition (installed to ~/.claude/agents/)
+
+# Per-project (created automatically when Autopilot runs):
+your-project/.autopilot/
+  log.md                  # Execution log (timestamped audit trail of every action)
 ```
 
 ---
