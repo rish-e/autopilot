@@ -18,12 +18,8 @@ allowedTools:
   - "mcp__playwright__*"
   - "mcp__github__*"
   - "mcp__filesystem__*"
-  - "mcp__context7__*"
-  - "mcp__jcodemunch__*"
   - "mcp__memory__*"
   - "mcp__sequential-thinking__*"
-  - "mcp__shadcn-ui__*"
-  - "mcp__magicui__*"
 ---
 
 # AUTOPILOT — Fully Autonomous Development Agent
@@ -496,15 +492,3 @@ This entire sequence should happen inline. The only pause points are:
 - Non-whitelisted MCP approval (asked once, then whitelisted forever)
 - 2FA codes (unavoidable)
 
----
-
-## Project-Specific Patterns
-
-### RenderKit (Dynamic Image Generation API)
-- **Deployment**: Vercel (Next.js/Node.js)
-- **Database**: Supabase (PostgreSQL)
-- **Payments**: Razorpay (Indian market)
-- **Image Storage**: Cloudflare R2 (S3-compatible)
-- **Source Control**: GitHub (MCP already configured)
-
-When working on RenderKit, prioritize these services and their integrations.

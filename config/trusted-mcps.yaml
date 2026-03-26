@@ -21,50 +21,18 @@
 # =============================================================================
 
 installed:
-  - name: context7
-    package: "@upstash/context7-mcp"
-    source: verified
-    category: documentation
-
-  - name: filesystem
-    package: "@modelcontextprotocol/server-filesystem"
-    source: official
-    category: filesystem
-
-  - name: github
-    type: http
-    source: official
-    category: source-control
-
-  - name: jcodemunch
-    package: jcodemunch-mcp
-    source: community
-    category: code-analysis
-
-  - name: memory
-    package: "@modelcontextprotocol/server-memory"
-    source: official
-    category: persistence
-
-  - name: sequential-thinking
-    package: "@modelcontextprotocol/server-sequential-thinking"
-    source: official
-    category: reasoning
-
-  - name: shadcn-ui
-    package: local (~/MCPs/shadcn-ui-mcp-server/)
-    source: verified
-    category: ui-components
-
-  - name: playwright
-    package: local (~/MCPs/playwright-mcp/)
-    source: official
-    category: browser-automation
-
-  - name: magicui
-    package: local (~/MCPs/mcp-main/)
-    source: verified
-    category: ui-components
+  # This section is populated by the installer based on what MCPs you have.
+  # Example entries:
+  #
+  # - name: playwright
+  #   package: "@playwright/mcp"
+  #   source: official
+  #   category: browser-automation
+  #
+  # - name: github
+  #   type: http
+  #   source: official
+  #   category: source-control
 
 # =============================================================================
 # WHITELISTED (autopilot can install these silently when needed)

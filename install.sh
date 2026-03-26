@@ -8,6 +8,11 @@
 
 set -euo pipefail
 
+# Clean up temp files on exit (even on failure)
+TMP_DIR=""
+cleanup() { [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ] && rm -rf "$TMP_DIR"; }
+trap cleanup EXIT
+
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
@@ -379,12 +384,6 @@ fi
 
 info "Installing recommended CLIs..."
 "$INSTALL_DIR/bin/setup-clis.sh" || warn "Some CLIs failed to install — Autopilot will retry on-demand"
-
-# ─── Clean Up ─────────────────────────────────────────────────────────────
-
-if [ -n "${TMP_DIR:-}" ] && [ -d "${TMP_DIR:-}" ]; then
-    rm -rf "$TMP_DIR"
-fi
 
 # ─── Done ─────────────────────────────────────────────────────────────────
 

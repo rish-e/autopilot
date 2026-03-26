@@ -35,16 +35,26 @@ if [ -f "$SETTINGS_FILE" ]; then
     fi
 fi
 
+# Remove Bash auto-approve from settings.local.json (CRITICAL — without guardian, this is dangerous)
+if [ -f "$SETTINGS_LOCAL" ]; then
+    if jq -e '.permissions.allow | index("Bash")' "$SETTINGS_LOCAL" &>/dev/null; then
+        jq '.permissions.allow = [.permissions.allow[] | select(. != "Bash")]' \
+            "$SETTINGS_LOCAL" > "$SETTINGS_LOCAL.tmp" && mv "$SETTINGS_LOCAL.tmp" "$SETTINGS_LOCAL"
+        echo -e "${GREEN}[OK]${NC} Removed Bash auto-approve from permissions (guardian is gone — auto-approve would be unsafe)"
+    fi
+fi
+
 echo ""
 echo -e "${YELLOW}Note:${NC} The following were NOT removed (may contain your data):"
-echo "  - $INSTALL_DIR/ (service registry, credentials config, custom rules)"
-echo "  - Permissions in $SETTINGS_LOCAL (Bash auto-approve)"
-echo "  - Any credentials stored in macOS Keychain (under 'claude-autopilot/' prefix)"
+echo "  - $INSTALL_DIR/ (service registry, custom rules)"
+echo "  - Credentials in your OS credential store (under 'claude-autopilot/' prefix)"
 echo "  - Installed CLIs (gh, vercel, supabase)"
 echo ""
 echo "To fully remove everything:"
 echo "  rm -rf $INSTALL_DIR"
-echo "  # Remove 'Bash' from permissions.allow in $SETTINGS_LOCAL"
-echo "  # Keychain entries: security delete-generic-password -s 'claude-autopilot/SERVICE' -a 'KEY'"
+echo "  # Credential cleanup depends on your OS:"
+echo "  #   macOS:   security delete-generic-password -s 'claude-autopilot/SERVICE' -a 'KEY'"
+echo "  #   Linux:   secret-tool clear service 'claude-autopilot/SERVICE' key 'KEY'"
+echo "  #   Windows: cmdkey /delete:claude-autopilot/SERVICE/KEY"
 echo ""
 echo -e "${GREEN}${BOLD}Autopilot uninstalled.${NC}"

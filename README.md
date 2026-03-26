@@ -236,7 +236,7 @@ If something breaks midway, open the log to see exactly what happened and where.
     keychain.sh          # macOS Keychain wrapper (get/set/delete/list/has)
     guardian.sh           # PreToolUse safety hook (hard-blocks dangerous commands)
     setup-clis.sh         # CLI installer (gh, vercel, supabase, wrangler, etc.)
-    test-guardian.sh      # 45-test suite for the guardian
+    test-guardian.sh      # 55-test suite for the guardian
   config/
     decision-framework.md # When to act vs. ask (5 levels)
     guardian-custom-rules.txt  # Append-only blocklist (expands with new services)
@@ -264,7 +264,7 @@ your-project/.autopilot/
 
 Autopilot's safety is layered. The Guardian provides **hard enforcement** that the AI cannot bypass. The Decision Framework provides **intelligent classification** that the AI follows.
 
-### What the Guardian Blocks (45 tested patterns)
+### What the Guardian Blocks (55 tested patterns)
 
 | Category | Examples |
 |----------|---------|
@@ -276,6 +276,7 @@ Autopilot's safety is layered. The Guardian provides **hard enforcement** that t
 | **Account changes** | `gh repo edit --visibility public`, `gh repo delete` |
 | **Financial** | Creating Stripe charges, sending emails |
 | **MCP process killing** | `kill`/`pkill`/`killall` targeting Playwright or MCP servers |
+| **Obfuscation/evasion** | `base64 \| bash`, `bash -c`, `eval`, `python -c os.system()`, `node -e exec()` |
 
 ### What's Auto-Approved (zero prompt)
 
