@@ -117,18 +117,37 @@ The user should see a clean plan of what will happen, not a checklist of interna
 
 ## Credential Management
 
+### Primary Credentials
+
+A master email and password stored in Keychain, used as the default for signing up and logging into any service:
+
+```bash
+# Check if primary credentials are set
+~/MCPs/autopilot/bin/keychain.sh has primary email
+~/MCPs/autopilot/bin/keychain.sh has primary password
+
+# Set primary credentials (one-time setup — user provides these once ever)
+echo "{email}" | ~/MCPs/autopilot/bin/keychain.sh set primary email
+echo "{password}" | ~/MCPs/autopilot/bin/keychain.sh set primary password
+```
+
+**First-time setup**: If no primary credentials exist when the agent first needs them, ask the user ONCE: "I need a primary email and password to use for signing up to services. I'll store these in your macOS Keychain." Store them, then never ask again.
+
 ### Acquisition Priority (how to GET credentials)
 
 When you need a credential that isn't stored:
 
-1. **Check keychain first**: `~/MCPs/autopilot/bin/keychain.sh has {service} {key}`
-2. **Try browser session**: Navigate to the service dashboard via Playwright. Check if already logged in (existing session from prior use). If logged in → go straight to generating the token.
-3. **Log in with stored credentials**: If not logged in but email/password are in keychain → fill the login form, submit, handle any non-2FA verification.
-4. **If 2FA appears**: Tell the user exactly what's needed ("Enter the 6-digit code from your authenticator app in the browser"). Wait. Then continue.
-5. **If no credentials exist at all**: Ask the user for email + password ONCE. Store both in keychain. Then proceed to log in and get the token yourself.
-6. **Generate the token via browser**: Navigate to the API keys/tokens page (URL is in the service registry). Create a new token. Use `browser_snapshot` to read the token value from the page. Store it in keychain.
+1. **Check keychain for service-specific token**: `~/MCPs/autopilot/bin/keychain.sh has {service} api-token` → use it directly with CLI.
+2. **Check keychain for service-specific login**: `~/MCPs/autopilot/bin/keychain.sh has {service} email` → log in with those.
+3. **Try browser session**: Navigate to the service dashboard via Playwright. Check if already logged in (existing session from persistent browser profile). If logged in → go straight to generating the token.
+4. **Use primary credentials**: If no service-specific login exists, use the primary email and password from Keychain to sign up or log in. This is the default for any new service.
+5. **If 2FA appears**: Tell the user exactly what's needed ("Enter the 6-digit code from your authenticator app in the browser"). Wait. Then continue.
+6. **If no primary credentials exist**: Ask the user for their primary email + password ONCE. Store in keychain under `primary`. Then proceed.
+7. **Generate the token via browser**: Navigate to the API keys/tokens page (URL is in the service registry). Create a new token. Use `browser_snapshot` to read the token value from the page. Store it in keychain under the service name.
 
-**The user should NEVER have to go to a dashboard, copy a token, and paste it.** That's your job.
+After acquiring credentials for a new service, **always store the service-specific token** in Keychain so future access uses the token directly (step 1) without needing the browser.
+
+**The user should NEVER have to go to a dashboard, copy a token, sign up, or paste anything.** That's your job.
 
 ### Storage (keychain wrapper)
 
@@ -342,22 +361,34 @@ Each session gets a new section. Each action gets a row in the table.
 | # | Time | Action | Level | Service | Result |
 |---|------|--------|-------|---------|--------|
 | 1 | 14:05 | Installed Supabase CLI via brew | L1 | supabase | done |
-| 2 | 14:06 | Created project (ref: abc123) | L2 | supabase | done |
-| 3 | 14:07 | Ran migration: create users table | L2 | supabase | done |
-| 4 | 14:08 | Generated TypeScript types | L1 | supabase | done |
-| 5 | 14:09 | Deployed to preview | L2 | vercel | done — https://myapp.vercel.app |
-| 6 | 14:10 | Set env vars from Supabase connection | L2 | vercel | done |
+| 2 | 14:06 | Signed up at supabase.com (primary email) | L2 | supabase | ACCOUNT CREATED |
+| 3 | 14:07 | Created project (ref: abc123) | L2 | supabase | done |
+| 4 | 14:08 | Ran migration: create users table | L2 | supabase | done |
+| 5 | 14:09 | Logged in to vercel.com (primary email) | L2 | vercel | LOGGED IN |
+| 6 | 14:10 | Deployed to preview | L2 | vercel | done — https://myapp.vercel.app |
+| 7 | 14:11 | Set env vars from Supabase connection | L2 | vercel | done |
 ```
 
 If a step fails:
 ```
-| 7 | 14:11 | Ran migration: add RLS policies | L2 | supabase | FAILED — syntax error in policy.sql |
+| 8 | 14:12 | Ran migration: add RLS policies | L2 | supabase | FAILED — syntax error in policy.sql |
 ```
+
+### Account Activity Tracking
+
+When the agent signs up for a new service or logs into an existing one, it MUST be logged with special markers:
+
+- **ACCOUNT CREATED** — when signing up for a new service (include the service URL and that primary email was used)
+- **LOGGED IN** — when logging into an existing account (include the service URL)
+- **TOKEN STORED** — when an API token is acquired and saved to Keychain (include the service name, never the token value)
+
+This gives the user a clear record of which services have accounts, where the agent logged in, and what tokens exist — without exposing any credential values.
 
 ### Rules
 
 - **Log before you execute** each action (with result pending), then **update** after it completes. If the agent crashes mid-step, the log shows exactly where it stopped.
-- **Never log credential values.** Log that a credential was acquired ("Stored Vercel API token in keychain") but never the value itself.
+- **Never log credential values.** Log that a credential was acquired ("Stored Vercel API token in keychain") but never the token, password, or email value itself.
+- **Always log account creation and logins.** These are critical for the user to know which services have accounts and where the agent authenticated.
 - **Never log to the autopilot system directory.** Always log to the project's `.autopilot/log.md`.
 - **Add `.autopilot/` to the project's `.gitignore`** if it's a git repo and `.autopilot` isn't already ignored. The log may contain project-specific operational details that don't belong in version control.
 - Keep entries concise — one line per action. The log should be scannable.
@@ -368,6 +399,7 @@ The user doesn't watch every step in real-time. If something breaks at step 5 of
 - What steps 1-4 did (to understand the current state)
 - Exactly where step 5 failed (to debug)
 - What steps 6-8 were supposed to do (to finish manually if needed)
+- **Which services have accounts** and where the agent logged in
 
 ---
 
@@ -460,7 +492,7 @@ When you encounter an unknown service mid-task:
 ```
 
 This entire sequence should happen inline. The only pause points are:
-- First-time login credentials (email + password, asked once ever)
+- Primary credentials not set (asked once ever, then used for all services)
 - Non-whitelisted MCP approval (asked once, then whitelisted forever)
 - 2FA codes (unavoidable)
 

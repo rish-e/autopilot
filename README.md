@@ -96,8 +96,8 @@ For complex tasks, Autopilot presents a numbered plan, waits for a single "proce
 ### Project-Local Execution Log
 Every action is automatically logged to `{project}/.autopilot/log.md` — timestamped, with decision level, service, and result. If something breaks at step 5 of 8, you open the log and see exactly what happened, where it failed, and what was supposed to come next. Especially useful for Level 1-2 actions that execute silently without asking.
 
-### Browser-Based Credential Acquisition
-Need an API key? Autopilot opens Playwright, logs into the dashboard, navigates to the tokens page, creates one, copies it, stores it in Keychain. You provide your email and password once per service. Autopilot handles everything else.
+### Zero-Touch Credential Acquisition
+Set your primary email and password once — stored in macOS Keychain encryption. When Autopilot encounters a new service, it uses your primary credentials to sign up or log in, gets the API token, stores it, and continues. No per-service setup. Account creations and logins are tracked in the project's execution log so you always know what was done where.
 
 ### Self-Expanding
 Encounter a service not in the registry? Autopilot researches the docs (WebSearch + WebFetch), creates a service registry file, installs the CLI, adds safety rules, and continues — all inline, without stopping to ask.
@@ -214,13 +214,16 @@ your-project/.autopilot/log.md
 | # | Time | Action | Level | Service | Result |
 |---|------|--------|-------|---------|--------|
 | 1 | 14:05 | Installed Supabase CLI via brew | L1 | supabase | done |
-| 2 | 14:06 | Created project (ref: abc123) | L2 | supabase | done |
-| 3 | 14:07 | Ran migration: create users table | L2 | supabase | done |
-| 4 | 14:08 | Deployed to preview | L2 | vercel | done — https://myapp.vercel.app |
-| 5 | 14:09 | Set env vars | L2 | vercel | done |
+| 2 | 14:06 | Signed up at supabase.com (primary email) | L2 | supabase | ACCOUNT CREATED |
+| 3 | 14:06 | Stored Supabase API token in keychain | L1 | supabase | TOKEN STORED |
+| 4 | 14:07 | Created project (ref: abc123) | L2 | supabase | done |
+| 5 | 14:08 | Ran migration: create users table | L2 | supabase | done |
+| 6 | 14:09 | Logged in to vercel.com (primary email) | L2 | vercel | LOGGED IN |
+| 7 | 14:10 | Deployed to preview | L2 | vercel | done — https://myapp.vercel.app |
+| 8 | 14:11 | Set env vars | L2 | vercel | done |
 ```
 
-If something breaks midway, open the log to see exactly what happened and where.
+If something breaks midway, open the log to see exactly what happened and where. Account creations (ACCOUNT CREATED), logins (LOGGED IN), and token acquisitions (TOKEN STORED) are always tracked so you know which services have accounts.
 
 ---
 
