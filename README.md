@@ -173,33 +173,37 @@ cd autopilot
 
 ## Usage
 
+### Two ways to use Autopilot
+
+**Slash command** — use from any Claude Code session (recommended for most tasks):
+
 ```bash
-# Start Autopilot (recommended — Guardian provides the safety rails)
-claude --agent autopilot --dangerously-skip-permissions
-
-# Deploy and host
-> Deploy this to Vercel with environment variables from Supabase
-
-# Databases
-> Set up Supabase with user auth tables, API keys, and usage tracking
-
-# Payments
-> Configure Stripe payments with webhooks for subscription billing
-
-# Infrastructure
-> Create a Cloudflare R2 bucket for image storage and set up a Worker for resizing
-
-# CI/CD
-> Set up GitHub Actions to run tests on PR and deploy to Vercel on merge to main
-
-# Multiple services at once
-> I need this running in production with a Postgres database, Stripe payments, and Sentry monitoring
-
-# Services it's never seen before
-> Set up Resend for transactional emails and Upstash for Redis caching
+# Inside any Claude Code session, type:
+/autopilot deploy this to Vercel with environment variables from Supabase
+/autopilot set up Supabase with user auth tables and API keys
+/autopilot configure Stripe payments with webhooks
+/autopilot create a Cloudflare R2 bucket for image storage
 ```
 
-Autopilot figures out the rest. If it's a service it hasn't seen before, it researches the docs, creates a registry file, installs the CLI, and keeps going. First time with a service, it asks for your login credentials once. Every subsequent interaction is fully autonomous (except 2FA codes — those need your phone).
+**Agent mode** — dedicated session for big multi-service orchestrations:
+
+```bash
+# Start a full Autopilot session
+claude --agent autopilot --dangerously-skip-permissions
+
+> I need this running in production with a Postgres database, Stripe payments, and Sentry monitoring
+```
+
+### When to use which
+
+| Situation | Use |
+|-----------|-----|
+| Quick deploy, get an API key, install a service | `/autopilot` slash command |
+| Full project setup from scratch | Agent mode |
+| Mid-coding infrastructure task | `/autopilot` slash command |
+| Multi-service orchestration (5+ services) | Agent mode |
+
+Autopilot figures out the rest. If it's a service it hasn't seen before, it researches the docs, creates a registry file, installs the CLI, and keeps going. Your primary credentials handle signups automatically. Every subsequent interaction is fully autonomous (except 2FA codes — those need your phone).
 
 ### Execution Log
 
@@ -250,8 +254,10 @@ If something breaks midway, open the log to see exactly what happened and where.
     github.md             # GitHub: repos, PRs, issues, Actions
     cloudflare.md         # Cloudflare: Workers, R2, KV, DNS
     razorpay.md           # Razorpay: payments, subscriptions, webhooks
+  commands/
+    autopilot.md          # /autopilot slash command (installed to ~/.claude/commands/)
   agent/
-    autopilot.md          # The agent definition (installed to ~/.claude/agents/)
+    autopilot.md          # Full agent definition (installed to ~/.claude/agents/)
 
 # Per-project (created automatically when Autopilot runs):
 your-project/.autopilot/

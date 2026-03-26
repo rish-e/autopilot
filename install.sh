@@ -213,8 +213,10 @@ else
 fi
 
 # Create directories
-mkdir -p "$INSTALL_DIR"/{bin,config,services}
+COMMANDS_DIR="$HOME/.claude/commands"
+mkdir -p "$INSTALL_DIR"/{bin,config,services,commands}
 mkdir -p "$AGENT_DIR"
+mkdir -p "$COMMANDS_DIR"
 
 # Copy core files
 cp -f "$SOURCE_DIR/bin/keychain.sh" "$INSTALL_DIR/bin/"
@@ -246,6 +248,10 @@ ok "Service registry installed"
 # Copy agent definition
 cp -f "$SOURCE_DIR/agent/autopilot.md" "$AGENT_DIR/autopilot.md"
 ok "Agent definition installed at $AGENT_DIR/autopilot.md"
+
+# Copy slash command
+cp -f "$SOURCE_DIR/commands/autopilot.md" "$COMMANDS_DIR/autopilot.md"
+ok "Slash command installed (/autopilot)"
 
 # Make scripts executable
 chmod +x "$INSTALL_DIR/bin/"*.sh
@@ -391,7 +397,8 @@ echo ""
 echo -e "${GREEN}${BOLD}Autopilot installed successfully!${NC}"
 echo ""
 echo "  Platform: $PLATFORM"
-echo "  Start it: claude --agent autopilot --dangerously-skip-permissions"
+echo "  Quick use: /autopilot <task>  (from any Claude Code session)"
+echo "  Full mode: claude --agent autopilot --dangerously-skip-permissions"
 echo ""
 echo "  What's installed:"
 echo "    Agent:     $AGENT_DIR/autopilot.md"

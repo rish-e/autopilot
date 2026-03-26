@@ -10,6 +10,7 @@ NC='\033[0m'
 
 INSTALL_DIR="$HOME/MCPs/autopilot"
 AGENT_FILE="$HOME/.claude/agents/autopilot.md"
+COMMAND_FILE="$HOME/.claude/commands/autopilot.md"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 SETTINGS_LOCAL="$HOME/.claude/settings.local.json"
 
@@ -21,6 +22,12 @@ echo ""
 if [ -f "$AGENT_FILE" ]; then
     rm "$AGENT_FILE"
     echo -e "${GREEN}[OK]${NC} Removed agent definition"
+fi
+
+# Remove slash command
+if [ -f "$COMMAND_FILE" ]; then
+    rm "$COMMAND_FILE"
+    echo -e "${GREEN}[OK]${NC} Removed /autopilot slash command"
 fi
 
 # Remove guardian hook from settings.json
