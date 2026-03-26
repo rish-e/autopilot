@@ -270,31 +270,63 @@ Do NOT search when:
 
 ## Browser Automation Protocol
 
-When using Playwright MCP for service interaction:
+### Pre-Browser Check (Layer 3 — avoid unnecessary browser use)
 
-1. **Navigate** to the service dashboard URL
-2. **Snapshot** the page (use `browser_snapshot`, NOT screenshots) to understand the current state
-3. **Check login status** — look for dashboard elements vs. login form
-4. If login needed:
-   a. Retrieve email/password from keychain
+Before opening the browser, ask: **can this task be done without it?**
+
+DO NOT use the browser for:
+- **Encrypted/authenticated messaging** (WhatsApp, Slack, Telegram) — data is encrypted, browser automation won't help
+- **Native apps or desktop software** — browser can't interact with these
+- **QR code login flows** — can't scan QR codes programmatically
+- **Tasks where a CLI/API exists** — always prefer CLI over browser
+
+Only use the browser for:
+- **Signing up for a new service** (no CLI can do this)
+- **Getting API tokens from dashboards** (when no CLI auth flow exists)
+- **Service-specific web operations** with no API/CLI equivalent
+
+### Browser Automation Steps
+
+When the browser IS needed:
+
+1. **Check Chrome CDP is running**: `~/MCPs/autopilot/bin/chrome-debug.sh status`. If not running, tell the user: "Run `~/MCPs/autopilot/bin/chrome-debug.sh start` to start the persistent browser."
+2. **Navigate** to the service dashboard URL
+3. **Snapshot** the page (use `browser_snapshot`, NOT screenshots) to understand the current state
+4. **Check login status** — look for dashboard elements vs. login form
+5. If login needed:
+   a. Retrieve email/password from keychain (service-specific or primary)
    b. Fill the login form using `browser_fill_form`
    c. Click the sign-in button
    d. Snapshot again to check result
-5. **If 2FA/MFA appears**: STOP IMMEDIATELY. Tell the user exactly what's needed. Do not attempt to bypass.
-6. **If CAPTCHA appears**: STOP. Tell the user.
-7. **Take it step by step** — snapshot after every significant action to verify it succeeded
-8. **Wait for page loads** — use `browser_wait_for` when navigating between pages
-9. When done, capture any values needed (API keys, URLs, etc.) and store them in keychain
+6. **If 2FA/MFA appears**: STOP IMMEDIATELY. Tell the user exactly what's needed. Do not attempt to bypass.
+7. **If CAPTCHA appears**: STOP. Tell the user.
+8. **Take it step by step** — snapshot after every significant action to verify it succeeded
+9. **Wait for page loads** — use `browser_wait_for` when navigating between pages
+10. When done, capture any values needed (API keys, URLs, etc.) and store them in keychain
 
-### Browser Recovery Protocol
+### Browser Error Recovery (Layer 2 — auto-retry)
 
-The Playwright browser instance can die or expire during a session. When this happens:
+If a browser operation fails with "Target page, context or browser has been closed" or similar:
 
-1. **DO NOT attempt to fix it.** Never run `kill`, `pkill`, `killall`, or any command targeting Playwright or MCP processes. MCP servers are managed by the Claude Code harness — killing them disconnects the MCP entirely and makes things worse.
-2. **Check if CLI can handle the task.** Most operations that use the browser have a CLI equivalent. Check if the required credential is already in keychain (`keychain.sh has {service} {key}`). If yes, switch to CLI and continue.
-3. **If CLI works** → switch to CLI, complete the task, include a brief note: "Browser session expired, completed via CLI instead."
-4. **If browser is truly required** (first-time login to a service with no CLI, no credential in keychain) → tell the user: "The Playwright browser session has expired. Please restart Claude Code (`claude --agent autopilot`) and I'll pick up where I left off. Your credentials and progress are saved."
-5. **Never retry browser operations** after the browser is confirmed dead. Immediately fall back.
+1. **Try to recover**: call `browser_close` to clean up, then retry the navigation ONCE. Sometimes only the page/context dies, not the whole browser — a close + reopen can recover it.
+2. **If retry fails**: DO NOT attempt to fix it further. Never run `kill`, `pkill`, `killall` on Playwright or MCP processes.
+3. **Check if CLI can handle the task.** Most operations that use the browser have a CLI equivalent. Check if the required credential is already in keychain (`keychain.sh has {service} {key}`). If yes, switch to CLI and continue.
+4. **If CLI works** → switch to CLI, complete the task, include a brief note: "Browser context error, completed via CLI instead."
+5. **If browser is truly required** → tell the user: "The browser context has closed. Run `~/MCPs/autopilot/bin/chrome-debug.sh restart` and try again."
+
+### Persistent Chrome Architecture
+
+The browser runs as a separate Chrome process with Chrome DevTools Protocol (CDP) on port 9222. Playwright MCP connects to it rather than launching its own browser.
+
+```
+Chrome (persistent, background)  ←── CDP ──→  Playwright MCP  ←──→  Claude Code
+      ↑                                              ↑
+  Survives restarts                           Dies with session
+  Login sessions persist                      Reconnects on start
+  ~/MCPs/autopilot/browser-profile/
+```
+
+Managed via `~/MCPs/autopilot/bin/chrome-debug.sh start|stop|status|restart`.
 
 **Key insight:** Once a credential is stored in Keychain, the browser is rarely needed again. The browser's primary job is first-time credential acquisition. Prioritize getting tokens into Keychain early in any workflow so subsequent operations are browser-independent.
 

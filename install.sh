@@ -333,31 +333,48 @@ fi
 
 # ─── Configure Playwright MCP ──────────────────────────────────────────────
 
-info "Configuring Playwright MCP for browser stability..."
+info "Configuring Playwright MCP with persistent Chrome (CDP)..."
 
 PLAYWRIGHT_CONFIG="$INSTALL_DIR/config/playwright-config.json"
 BROWSER_PROFILE="$INSTALL_DIR/browser-profile"
 CLAUDE_JSON="$HOME/.claude.json"
+CHROME_DEBUG="$INSTALL_DIR/bin/chrome-debug.sh"
 
 mkdir -p "$BROWSER_PROFILE"
-ok "Browser profile directory: $BROWSER_PROFILE"
 
+# Start persistent Chrome with CDP (if not already running)
+if "$CHROME_DEBUG" status > /dev/null 2>&1; then
+    ok "Chrome CDP already running"
+else
+    info "Starting persistent Chrome with CDP..."
+    "$CHROME_DEBUG" start || warn "Could not start Chrome CDP — start manually: $CHROME_DEBUG start"
+fi
+
+# Detect the CDP endpoint URL (handles IPv4 vs IPv6)
+CDP_URL=$("$CHROME_DEBUG" url 2>/dev/null || echo "http://127.0.0.1:9222")
+
+# Update the playwright config with detected CDP URL
+jq --arg url "$CDP_URL" '.browser.cdpEndpoint = $url' \
+    "$PLAYWRIGHT_CONFIG" > "$PLAYWRIGHT_CONFIG.tmp" && mv "$PLAYWRIGHT_CONFIG.tmp" "$PLAYWRIGHT_CONFIG"
+ok "Playwright config updated with CDP endpoint: $CDP_URL"
+
+# Configure Playwright MCP in Claude Code to use our config
 if [ -f "$CLAUDE_JSON" ]; then
     if jq -e '.mcpServers.playwright' "$CLAUDE_JSON" &>/dev/null; then
         CURRENT_ARGS=$(jq -r '.mcpServers.playwright.args // [] | join(" ")' "$CLAUDE_JSON")
         if echo "$CURRENT_ARGS" | grep -q "playwright-config.json"; then
             ok "Playwright MCP already using autopilot config"
         else
-            jq --arg config "$PLAYWRIGHT_CONFIG" --arg profile "$BROWSER_PROFILE" \
-                '.mcpServers.playwright.args = (.mcpServers.playwright.args + ["--config", $config]) | .mcpServers.playwright.env.PLAYWRIGHT_MCP_USER_DATA_DIR = $profile' \
+            jq --arg config "$PLAYWRIGHT_CONFIG" \
+                '.mcpServers.playwright.args = (.mcpServers.playwright.args + ["--config", $config])' \
                 "$CLAUDE_JSON" > "$CLAUDE_JSON.tmp" && mv "$CLAUDE_JSON.tmp" "$CLAUDE_JSON"
-            ok "Playwright MCP updated with stability config"
+            ok "Playwright MCP updated with CDP config"
         fi
     else
-        jq --arg config "$PLAYWRIGHT_CONFIG" --arg profile "$BROWSER_PROFILE" \
-            '.mcpServers.playwright = {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--config",$config],"env":{"PLAYWRIGHT_MCP_USER_DATA_DIR":$profile}}' \
+        jq --arg config "$PLAYWRIGHT_CONFIG" \
+            '.mcpServers.playwright = {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--config",$config],"env":{}}' \
             "$CLAUDE_JSON" > "$CLAUDE_JSON.tmp" && mv "$CLAUDE_JSON.tmp" "$CLAUDE_JSON"
-        ok "Playwright MCP added with stability config"
+        ok "Playwright MCP added with CDP config"
     fi
 else
     cat > "$CLAUDE_JSON" << CLAUDEJSON
@@ -367,9 +384,7 @@ else
       "type": "stdio",
       "command": "npx",
       "args": ["@playwright/mcp@latest", "--config", "$PLAYWRIGHT_CONFIG"],
-      "env": {
-        "PLAYWRIGHT_MCP_USER_DATA_DIR": "$BROWSER_PROFILE"
-      }
+      "env": {}
     }
   }
 }

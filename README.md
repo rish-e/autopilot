@@ -127,8 +127,17 @@ A PreToolUse hook that runs before every Bash command. It's a shell script — d
 ### Smart Permissions
 All tools auto-approved (same speed as `--dangerously-skip-permissions`), with the Guardian catching dangerous patterns. Safe commands fly through with zero prompts. Dangerous commands are hard-blocked before they execute.
 
-### Browser Stability & Recovery
-The Playwright MCP is pre-configured with Chromium stability flags that prevent background throttling, hang detection, and IPC flooding — the most common causes of browser death during long sessions. A persistent browser profile at `~/MCPs/autopilot/browser-profile/` keeps login sessions alive across restarts. If the browser still dies (rare), the agent falls back to CLI tools automatically and only asks you to restart if browser is truly needed (e.g., first-time login to a new service).
+### Persistent Browser (Never Dies)
+The browser runs as a separate Chrome process via Chrome DevTools Protocol — independent of Claude Code. When your session ends or restarts, the browser stays alive. Login sessions persist. The Playwright MCP just reconnects to it.
+
+```
+Chrome (persistent, background)  ←── CDP ──→  Playwright MCP  ←──→  Claude Code
+      ↑                                              ↑
+  Always alive                                Dies with session
+  Login sessions persist                      Reconnects on start
+```
+
+Three-layer resilience: (1) persistent Chrome via CDP — browser never dies with the session, (2) auto-retry on context errors — recovers from tab crashes, (3) smart browser avoidance — skips the browser entirely for tasks it can't help with (encrypted apps, CLI-available operations).
 
 ### MCP Auto-Discovery
 Maintains a whitelist of trusted MCP servers. Whitelisted MCPs install silently when needed. Unknown MCPs: Autopilot explains what it found, why it's useful, and asks once. Approved MCPs are whitelisted forever.
@@ -237,8 +246,9 @@ If something breaks midway, open the log to see exactly what happened and where.
 ```
 ~/MCPs/autopilot/
   bin/
-    keychain.sh          # macOS Keychain wrapper (get/set/delete/list/has)
+    keychain.sh          # Cross-platform credential store (Keychain/libsecret/Credential Manager)
     guardian.sh           # PreToolUse safety hook (hard-blocks dangerous commands)
+    chrome-debug.sh       # Persistent Chrome manager (start/stop/status via CDP)
     setup-clis.sh         # CLI installer (gh, vercel, supabase, wrangler, etc.)
     test-guardian.sh      # 55-test suite for the guardian
   config/
@@ -373,7 +383,7 @@ Edit `~/MCPs/autopilot/config/trusted-mcps.yaml` and add to the `whitelisted` se
 - **Payment method setup** — PCI-compliant forms resist automation
 
 ### Technical
-- **Browser can still crash** — Stability flags reduce browser deaths significantly, but can't prevent all crashes. Autopilot falls back to CLI automatically. If you need browser automation after a crash, restart your Claude Code session. Login sessions persist in the browser profile.
+- **Chrome CDP needs to be running** — The persistent Chrome must be started before using browser features: `~/MCPs/autopilot/bin/chrome-debug.sh start`. The installer does this automatically, but after a system reboot you may need to start it again.
 - **Browser UIs change** — Playwright steps in service registry can break when dashboards redesign
 - **New MCPs need a restart** — installed MCPs take effect next Claude Code session
 - **No automatic rollback** — if a deploy goes wrong, you fix it manually

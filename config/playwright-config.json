@@ -1,22 +1,6 @@
 {
   "browser": {
-    "browserName": "chromium",
-    "launchOptions": {
-      "channel": "chrome",
-      "headless": false,
-      "args": [
-        "--disable-background-timer-throttling",
-        "--disable-renderer-backgrounding",
-        "--disable-backgrounding-occluded-windows",
-        "--disable-ipc-flooding-protection",
-        "--disable-hang-monitor",
-        "--disable-back-forward-cache",
-        "--disable-features=CalculateNativeWinOcclusion"
-      ]
-    },
-    "contextOptions": {
-      "viewport": { "width": 1280, "height": 720 }
-    }
+    "cdpEndpoint": "http://127.0.0.1:9222"
   },
   "timeouts": {
     "action": 10000,
