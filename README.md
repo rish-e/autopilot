@@ -1,46 +1,79 @@
-# Autopilot
+<p align="center">
+  <img src="https://img.shields.io/badge/Claude_Code-Agent-blueviolet?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0wIDE4Yy00LjQyIDAtOC0zLjU4LTgtOHMzLjU4LTggOC04IDggMy41OCA4IDgtMy41OCA4LTggOHoiLz48L3N2Zz4=&logoColor=white" alt="Claude Code Agent" />
+  <img src="https://img.shields.io/badge/Platform-macOS_|_Linux_|_Windows-success?style=for-the-badge" alt="Cross-platform" />
+  <img src="https://img.shields.io/badge/Safety-Guardian_Hook-red?style=for-the-badge" alt="Guardian" />
+  <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT License" />
+  <img src="https://img.shields.io/badge/Tests-55_passing-brightgreen?style=for-the-badge" alt="Tests" />
+</p>
 
-**The first self-expanding autonomous coding agent with hard safety rails.**
+<h1 align="center">Autopilot</h1>
 
-AI coding agents today are either autonomous but unsafe (Devin, Cursor — sandbox-only safety) or safe but constantly asking for permission (vanilla Claude Code). Autopilot is the third option: fully autonomous, with a deterministic safety layer the AI cannot override, and it teaches itself new services as it encounters them.
+<p align="center">
+  <strong>The first self-expanding autonomous coding agent with hard safety rails.</strong>
+</p>
+
+<p align="center">
+  <em>Fully autonomous &bull; Self-expanding &bull; Browser automation &bull; Cross-platform &bull; Hard safety rails</em>
+</p>
+
+---
+
+> AI coding agents today are either autonomous but unsafe (Devin, Cursor — sandbox-only safety) or safe but constantly asking for permission (vanilla Claude Code). Autopilot is the third option: fully autonomous, with a deterministic safety layer the AI cannot override, and it teaches itself new services as it encounters them.
+
+<br>
+
+<details>
+<summary><b>See it in action</b> (click to expand)</summary>
+<br>
 
 ```
 claude --agent autopilot
 > Set up Supabase for this project with user auth, deploy to Vercel, and configure Razorpay payments.
 
-Autopilot: Installing Supabase CLI... done.
-Autopilot: Opening Supabase dashboard to generate access token... [browser automation]
-Autopilot: Token stored in keychain. Creating project...
-Autopilot: Running migrations... Tables created: users, api_keys, usage_logs.
-Autopilot: Installing Vercel CLI... done.
-Autopilot: Deploying to preview... https://myapp-abc123.vercel.app
-Autopilot: Setting environment variables from Supabase connection...
-Autopilot: Opening Razorpay dashboard for API keys... [needs 2FA]
-Autopilot: "Enter the OTP sent to your phone in the browser."
+Autopilot: Here's the plan:
+  1. Install Supabase CLI
+  2. Sign up & create project
+  3. Run migrations (users, api_keys, usage_logs)
+  4. Install Vercel CLI & deploy to preview
+  5. Set environment variables from Supabase
+  6. Get Razorpay API keys (needs 2FA)
+  7. Configure webhook
+
+Proceed? yes
+
+[1/7] Supabase CLI installed via brew
+[2/7] Signed up at supabase.com .................. ACCOUNT CREATED
+[3/7] Migrations complete — 3 tables created
+[4/7] Deploying to preview ....................... https://myapp-abc123.vercel.app
+[5/7] Environment variables set from Supabase
+[6/7] Opening Razorpay dashboard... "Enter the OTP sent to your phone."
 > [user enters OTP]
-Autopilot: Razorpay keys stored. Webhook configured.
-Autopilot: Done. Preview: https://myapp-abc123.vercel.app
+[7/7] Razorpay keys stored, webhook configured
+
+Done. Preview: https://myapp-abc123.vercel.app
+All actions logged to .autopilot/log.md
 ```
 
-No copying API keys. No switching between terminals and dashboards. No "please paste your token here." Autopilot handles it.
+</details>
 
 ---
 
 ## What Can It Do?
 
-Autopilot is a **general-purpose autonomous agent** — not limited to any specific service or workflow. It handles anything you'd normally do outside your code editor:
+Autopilot is a **general-purpose autonomous agent** — not limited to any specific service or workflow:
 
-- **Deploy code** — Vercel, Netlify, Railway, Cloudflare, Fly.io, any platform
-- **Set up databases** — Create Supabase projects, write migrations, run SQL, configure auth and RLS
-- **Manage infrastructure** — Cloudflare Workers, R2 buckets, KV stores, DNS records, SSL certificates
-- **Configure services** — Payment providers (Stripe, Razorpay), email (SendGrid, Resend), monitoring (Sentry, Datadog), auth (Clerk, Auth0), or anything with a CLI or web dashboard
-- **Handle git workflows** — Commits, branches, PRs, issues, GitHub Actions, releases
-- **Browse the web** — Logs into dashboards, fills forms, clicks buttons, reads pages, navigates settings via Playwright
-- **Install and configure tools** — CLIs, MCP servers, dependencies, environment setup
-- **Acquire credentials autonomously** — Logs into service dashboards via browser, generates API tokens, stores them in macOS Keychain
-- **Teach itself new services** — Encounters something unknown? Researches the docs, creates a registry file, installs the CLI, adds safety rules, keeps going
+| Category | Examples |
+|:---------|:---------|
+| **Deploy code** | Vercel, Netlify, Railway, Cloudflare Workers, Fly.io |
+| **Set up databases** | Supabase, PostgreSQL, Firebase, Redis |
+| **Manage infrastructure** | R2 buckets, KV stores, DNS, SSL, CDN |
+| **Configure services** | Stripe, Razorpay, SendGrid, Resend, Sentry, Auth0, Clerk |
+| **Handle git** | Commits, branches, PRs, issues, Actions, releases |
+| **Browse the web** | Login to dashboards, fill forms, get API tokens |
+| **Install tools** | CLIs, MCP servers, dependencies |
+| **Teach itself** | Unknown service? Researches docs, creates registry, installs CLI, keeps going |
 
-The 5 pre-built service files (Vercel, Supabase, GitHub, Cloudflare, Razorpay) are just a head start. When Autopilot encounters any service not in the registry, it researches it, learns it, and expands itself — all inline, without stopping to ask.
+The 5 pre-built service files are just a head start. Autopilot self-expands when it encounters anything new.
 
 ---
 
@@ -50,154 +83,143 @@ The 5 pre-built service files (Vercel, Supabase, GitHub, Cloudflare, Razorpay) a
   You give a task
        |
        v
-  +---------------------------+
-  | Autopilot Agent           |     Reads: decision framework,
-  | (~/.claude/agents/        |     service registry, MCP whitelist
-  |  autopilot.md)            |
-  +---------------------------+
+  +--------------------------+
+  |    Autopilot Agent       |      Reads: decision framework,
+  |    Plan > Confirm >      |      service registry, MCP whitelist
+  |    Execute All           |
+  +--------------------------+
        |
        +----------+----------+-----------+
        |          |          |           |
        v          v          v           v
   +--------+ +--------+ +--------+ +---------+
-  |  MCP   | |  CLI   | |  API   | |Playwright|
-  | Tools  | | Tools  | | (curl) | | Browser  |
-  |        | |        | |        | |          |
-  |GitHub  | |vercel  | |Razorpay| |Login to  |
-  |Supabase| |supabase| |Stripe  | |dashboards|
-  |Postgres| |gh, etc | |any API | |Get tokens|
+  |  MCP   | |  CLI   | |  API   | | Browser |
+  | Tools  | | Tools  | | (curl) | |  (CDP)  |
   +--------+ +--------+ +--------+ +---------+
        |          |          |           |
        +----------+----------+-----------+
-       |
-       v
-  +---------------------------+       +---------------------------+
-  | macOS Keychain            |       | Guardian Hook             |
-  | (encrypted credentials)   |       | (blocks dangerous cmds)   |
-  |                           |       |                           |
-  | Stores: API tokens,       |       | Hard-blocks: rm -rf /,    |
-  | login credentials,        |       | DROP DATABASE, npm publish,|
-  | webhook secrets           |       | force push, prod deploys  |
-  +---------------------------+       +---------------------------+
+       |                                 |
+       v                                 v
+  +--------------------------+  +--------------------------+
+  |   Credential Store       |  |   Guardian Hook          |
+  |   (OS-native encrypted)  |  |   (blocks dangerous      |
+  |                          |  |    commands before they   |
+  |   macOS Keychain         |  |    execute)               |
+  |   Linux: libsecret       |  |                          |
+  |   Windows: Cred Manager  |  |   55 tested patterns     |
+  +--------------------------+  +--------------------------+
 ```
 
-**Priority order:** MCP integration > CLI tool > REST API > Browser automation > Ask user
+**Priority:** MCP > CLI > API > Browser > Ask user
 
 ---
 
 ## Features
 
 ### Fully Autonomous
-Autopilot acts first, asks only when the decision framework says to. It deploys code, configures databases, manages infrastructure, and obtains credentials — all without you leaving the terminal.
+> Autopilot acts first, asks only when the decision framework says to. It deploys code, configures databases, manages infrastructure, and obtains credentials — all without you leaving the terminal.
 
-### Plan → Confirm → Execute All
-For complex tasks, Autopilot presents a numbered plan, waits for a single "proceed", then executes every step end-to-end without pausing. Simple tasks just execute immediately. **The agent never stops to ask "what next?"** — once it starts, it runs to completion or until genuinely blocked.
+### Plan > Confirm > Execute All
+> For complex tasks: numbered plan, single "proceed", then runs every step without pausing. Simple tasks execute immediately. **Never stops to ask "what next?"**
 
 ### Project-Local Execution Log
-Every action is automatically logged to `{project}/.autopilot/log.md` — timestamped, with decision level, service, and result. If something breaks at step 5 of 8, you open the log and see exactly what happened, where it failed, and what was supposed to come next. Especially useful for Level 1-2 actions that execute silently without asking.
+> Every action logged to `{project}/.autopilot/log.md` — timestamped, with decision level and result. Account creations, logins, and token acquisitions are tracked with special markers.
 
-### Zero-Touch Credential Acquisition
-Set your primary email and password once — stored in macOS Keychain encryption. When Autopilot encounters a new service, it uses your primary credentials to sign up or log in, gets the API token, stores it, and continues. No per-service setup. Account creations and logins are tracked in the project's execution log so you always know what was done where.
+### Zero-Touch Credentials
+> Set your primary email and password once. Autopilot uses them for all new service signups. Stored in your OS credential store (Keychain / libsecret / Credential Manager).
 
 ### Self-Expanding
-Encounter a service not in the registry? Autopilot researches the docs (WebSearch + WebFetch), creates a service registry file, installs the CLI, adds safety rules, and continues — all inline, without stopping to ask.
+> Unknown service? Researches docs, creates registry file, installs CLI, adds safety rules, keeps going — all inline, no stopping.
 
-### Hard Safety Rails (Guardian)
-A PreToolUse hook that runs before every Bash command. It's a shell script — deterministic code, not AI instructions. The AI cannot reason around it, override it, or decide to ignore it. If the pattern matches the blocklist, the command is blocked. Period.
+### Hard Safety Rails
 
 ```
   Command Entered
        |
        v
-  [Guardian Hook]         <-- exit code 2 = HARD BLOCK
-       |                       (overrides all permissions)
-       |-- rm -rf / ?          -> BLOCKED
-       |-- npm publish ?       -> BLOCKED
-       |-- git push --force ?  -> BLOCKED
-       |-- vercel --prod ?     -> BLOCKED
-       |-- DROP DATABASE ?     -> BLOCKED
-       |-- npm install ?       -> ALLOWED
+  [Guardian Hook]              exit code 2 = HARD BLOCK
+       |                        (overrides all permissions)
+       |-- rm -rf / ?           BLOCKED
+       |-- bash -c "evil" ?     BLOCKED
+       |-- npm publish ?        BLOCKED
+       |-- git push --force ?   BLOCKED
+       |-- vercel --prod ?      BLOCKED
+       |-- DROP DATABASE ?      BLOCKED
+       |-- base64 | bash ?      BLOCKED
+       |-- npm install ?        ALLOWED
        v
-  [Permission Allowlist]  <-- auto-approve safe commands
+  [Permission Allowlist]       auto-approve safe commands
        |
        v
   Command Executes (no prompt)
 ```
 
-### Smart Permissions
-All tools auto-approved (same speed as `--dangerously-skip-permissions`), with the Guardian catching dangerous patterns. Safe commands fly through with zero prompts. Dangerous commands are hard-blocked before they execute.
-
-### Persistent Browser (Never Dies)
-The browser runs as a separate Chrome process via Chrome DevTools Protocol — independent of Claude Code. When your session ends or restarts, the browser stays alive. Login sessions persist. The Playwright MCP just reconnects to it.
+### Persistent Browser
 
 ```
-Chrome (persistent, background)  ←── CDP ──→  Playwright MCP  ←──→  Claude Code
-      ↑                                              ↑
-  Always alive                                Dies with session
-  Login sessions persist                      Reconnects on start
+  Chrome (background)  <-- CDP -->  Playwright MCP  <-->  Claude Code
+        |                                 |
+    Always alive                    Dies with session
+    Sessions persist                Reconnects on start
 ```
 
-Three-layer resilience: (1) persistent Chrome via CDP — browser never dies with the session, (2) auto-retry on context errors — recovers from tab crashes, (3) smart browser avoidance — skips the browser entirely for tasks it can't help with (encrypted apps, CLI-available operations).
-
-### MCP Auto-Discovery
-Maintains a whitelist of trusted MCP servers. Whitelisted MCPs install silently when needed. Unknown MCPs: Autopilot explains what it found, why it's useful, and asks once. Approved MCPs are whitelisted forever.
+Three layers: (1) persistent Chrome via CDP, (2) auto-retry on tab crashes, (3) smart browser avoidance.
 
 ### Decision Framework
 
 | Level | Action | Examples |
-|-------|--------|---------|
-| 1 — Just do it | Brief note | `npm install`, `git push`, read files, install CLIs |
-| 2 — Do it, notify | Brief note | Preview deploys, create branches, generate API tokens |
-| 3 — Ask first | Wait for approval | Production deploys, destructive DB ops, paid resources |
-| 4 — Must ask | Show exact command | Spending money, sending messages, publishing packages |
-| 5 — Escalate | Cannot proceed | 2FA codes, CAPTCHAs, first-time login credentials |
+|:------|:-------|:---------|
+| 1 — Just do it | Brief note | `npm install`, `git push`, read files |
+| 2 — Do it, notify | Brief note | Preview deploys, create branches |
+| 3 — Ask first | Wait for approval | Prod deploys, destructive DB ops |
+| 4 — Must ask | Show exact command | Spending money, publishing |
+| 5 — Escalate | Cannot proceed | 2FA codes, CAPTCHAs |
 
 ---
 
 ## Installation
 
-### One Command
-
 ```bash
+# One command
 curl -fsSL https://raw.githubusercontent.com/rish-e/autopilot/main/install.sh | bash
-```
 
-### Or Clone and Install
-
-```bash
+# Or clone and install
 git clone https://github.com/rish-e/autopilot.git
-cd autopilot
-./install.sh
+cd autopilot && ./install.sh
 ```
 
-### Requirements
+<details>
+<summary><b>Requirements</b></summary>
 
 - **macOS, Linux, or Windows** (Git Bash / WSL)
 - **Claude Code** installed
-- **Node.js** (installer will set it up if missing)
+- **Node.js** (installer handles it)
+- **Google Chrome** (for browser automation via CDP)
 - **Credential store**: macOS Keychain (auto) / `secret-tool` on Linux (installer installs it) / Windows Credential Manager (built-in)
 - **Package manager**: Homebrew (macOS), apt/dnf/pacman (Linux), choco/winget/scoop (Windows)
+
+</details>
 
 ---
 
 ## Usage
 
-### Two ways to use Autopilot
+### `/autopilot` — Slash Command (recommended)
 
-**Slash command** — use from any Claude Code session (recommended for most tasks):
+Use from any Claude Code session — no separate terminal needed:
 
 ```bash
-# Inside any Claude Code session, type:
 /autopilot deploy this to Vercel with environment variables from Supabase
 /autopilot set up Supabase with user auth tables and API keys
 /autopilot configure Stripe payments with webhooks
 /autopilot create a Cloudflare R2 bucket for image storage
 ```
 
-**Agent mode** — dedicated session for big multi-service orchestrations:
+### Agent Mode — Full Sessions
+
+For big multi-service orchestrations:
 
 ```bash
-# Start a full Autopilot session
 claude --agent autopilot --dangerously-skip-permissions
 
 > I need this running in production with a Postgres database, Stripe payments, and Sentry monitoring
@@ -206,17 +228,17 @@ claude --agent autopilot --dangerously-skip-permissions
 ### When to use which
 
 | Situation | Use |
-|-----------|-----|
-| Quick deploy, get an API key, install a service | `/autopilot` slash command |
+|:----------|:----|
+| Quick deploy, get an API key | `/autopilot` |
 | Full project setup from scratch | Agent mode |
-| Mid-coding infrastructure task | `/autopilot` slash command |
+| Mid-coding infrastructure task | `/autopilot` |
 | Multi-service orchestration (5+ services) | Agent mode |
 
-Autopilot figures out the rest. If it's a service it hasn't seen before, it researches the docs, creates a registry file, installs the CLI, and keeps going. Your primary credentials handle signups automatically. Every subsequent interaction is fully autonomous (except 2FA codes — those need your phone).
+---
 
-### Execution Log
+## Execution Log
 
-Every action is automatically logged to your project:
+Every action is tracked in your project:
 
 ```
 your-project/.autopilot/log.md
@@ -225,19 +247,16 @@ your-project/.autopilot/log.md
 ```markdown
 ## Session: 2026-03-25 14:05 — Set up Supabase and deploy to Vercel
 
-| # | Time | Action | Level | Service | Result |
-|---|------|--------|-------|---------|--------|
-| 1 | 14:05 | Installed Supabase CLI via brew | L1 | supabase | done |
-| 2 | 14:06 | Signed up at supabase.com (primary email) | L2 | supabase | ACCOUNT CREATED |
-| 3 | 14:06 | Stored Supabase API token in keychain | L1 | supabase | TOKEN STORED |
-| 4 | 14:07 | Created project (ref: abc123) | L2 | supabase | done |
-| 5 | 14:08 | Ran migration: create users table | L2 | supabase | done |
-| 6 | 14:09 | Logged in to vercel.com (primary email) | L2 | vercel | LOGGED IN |
-| 7 | 14:10 | Deployed to preview | L2 | vercel | done — https://myapp.vercel.app |
-| 8 | 14:11 | Set env vars | L2 | vercel | done |
+| # | Time  | Action                                     | Level | Service  | Result              |
+|---|-------|--------------------------------------------|-------|----------|---------------------|
+| 1 | 14:05 | Installed Supabase CLI via brew             | L1    | supabase | done                |
+| 2 | 14:06 | Signed up at supabase.com (primary email)   | L2    | supabase | ACCOUNT CREATED     |
+| 3 | 14:06 | Stored Supabase API token in keychain       | L1    | supabase | TOKEN STORED        |
+| 4 | 14:07 | Created project (ref: abc123)               | L2    | supabase | done                |
+| 5 | 14:08 | Ran migration: create users table           | L2    | supabase | done                |
+| 6 | 14:09 | Logged in to vercel.com (primary email)     | L2    | vercel   | LOGGED IN           |
+| 7 | 14:10 | Deployed to preview                         | L2    | vercel   | done — https://...  |
 ```
-
-If something breaks midway, open the log to see exactly what happened and where. Account creations (ACCOUNT CREATED), logins (LOGGED IN), and token acquisitions (TOKEN STORED) are always tracked so you know which services have accounts.
 
 ---
 
@@ -246,170 +265,146 @@ If something breaks midway, open the log to see exactly what happened and where.
 ```
 ~/MCPs/autopilot/
   bin/
-    keychain.sh          # Cross-platform credential store (Keychain/libsecret/Credential Manager)
-    guardian.sh           # PreToolUse safety hook (hard-blocks dangerous commands)
-    chrome-debug.sh       # Persistent Chrome manager (start/stop/status via CDP)
-    setup-clis.sh         # CLI installer (gh, vercel, supabase, wrangler, etc.)
-    test-guardian.sh      # 55-test suite for the guardian
+    keychain.sh           Cross-platform credential store
+    guardian.sh            PreToolUse safety hook (55 tested patterns)
+    chrome-debug.sh        Persistent Chrome manager (CDP)
+    setup-clis.sh          CLI installer (gh, vercel, supabase, etc.)
+    test-guardian.sh        Guardian test suite
   config/
-    decision-framework.md # When to act vs. ask (5 levels)
-    guardian-custom-rules.txt  # Append-only blocklist (expands with new services)
-    trusted-mcps.yaml     # MCP whitelist (20+ pre-vetted servers)
-    playwright-config.json # Chromium stability flags + persistent profile
-  browser-profile/        # Persistent browser profile (cookies, sessions survive restarts)
-  services/
-    _template.md          # Template for new service registry entries
-    vercel.md             # Vercel: deploy, env vars, domains
-    supabase.md           # Supabase: projects, migrations, SQL, types
-    github.md             # GitHub: repos, PRs, issues, Actions
-    cloudflare.md         # Cloudflare: Workers, R2, KV, DNS
-    razorpay.md           # Razorpay: payments, subscriptions, webhooks
-  commands/
-    autopilot.md          # /autopilot slash command (installed to ~/.claude/commands/)
-  agent/
-    autopilot.md          # Full agent definition (installed to ~/.claude/agents/)
+    decision-framework.md  When to act vs. ask (5 levels)
+    guardian-custom-rules.txt  Append-only blocklist
+    trusted-mcps.yaml      MCP whitelist (20+ pre-vetted)
+    playwright-config.json  CDP endpoint config
+  browser-profile/         Persistent browser sessions
+  services/                Service registry (5 built-in + template)
+  commands/                /autopilot slash command
+  agent/                   Full agent definition
 
-# Per-project (created automatically when Autopilot runs):
+# Per-project (created automatically):
 your-project/.autopilot/
-  log.md                  # Execution log (timestamped audit trail of every action)
+  log.md                   Execution log (audit trail)
 ```
 
 ---
 
 ## Safety Model
 
-Autopilot's safety is layered. The Guardian provides **hard enforcement** that the AI cannot bypass. The Decision Framework provides **intelligent classification** that the AI follows.
+<table>
+<tr>
+<td width="50%">
 
-### What the Guardian Blocks (55 tested patterns)
+### What Gets Blocked (55 patterns)
 
 | Category | Examples |
-|----------|---------|
-| **System destruction** | `rm -rf /`, `rm -rf ~`, `sudo rm -rf`, `mkfs`, `dd`, `shutdown` |
-| **Credential exfiltration** | `echo $(keychain.sh get ...)`, piping secrets to curl/files |
-| **Database destruction** | `DROP DATABASE`, `DROP SCHEMA`, `TRUNCATE` |
-| **Git/publishing** | `git push --force`, `git reset --hard`, `npm publish`, `cargo publish` |
-| **Production deploys** | `vercel deploy --prod`, `terraform destroy` |
-| **Account changes** | `gh repo edit --visibility public`, `gh repo delete` |
-| **Financial** | Creating Stripe charges, sending emails |
-| **MCP process killing** | `kill`/`pkill`/`killall` targeting Playwright or MCP servers |
-| **Obfuscation/evasion** | `base64 \| bash`, `bash -c`, `eval`, `python -c os.system()`, `node -e exec()` |
+|:---------|:---------|
+| System destruction | `rm -rf /`, `sudo rm -rf`, `mkfs` |
+| Credential leak | `echo $(keychain get)`, pipe to curl |
+| Database destruction | `DROP DATABASE`, `TRUNCATE` |
+| Git/publishing | `git push --force`, `npm publish` |
+| Production deploys | `vercel --prod`, `terraform destroy` |
+| Account changes | `gh repo --visibility public` |
+| Financial | Stripe charges, sending emails |
+| MCP process termination | Targeting Playwright/MCP servers |
+| Obfuscation | `base64\|bash`, `bash -c`, `eval` |
 
-### What's Auto-Approved (zero prompt)
-
-Everything not in the Guardian's blocklist. `npm install`, `git commit`, `vercel deploy` (preview), `supabase db push`, `curl`, `brew install`, file reads/writes — all execute instantly.
+</td>
+<td width="50%">
 
 ### The Safety Contract
 
-| Layer | Enforcement | Can AI bypass? |
-|-------|-------------|----------------|
-| Guardian hook | Shell script, exit code 2 | **No** — runs before the command, blocks deterministically |
-| Permission allowlist | Claude Code settings | **No** — evaluated by Claude Code, not the AI |
-| Decision framework | Agent instructions | In theory yes, but Guardian catches the dangerous cases |
-| Credential isolation | macOS Keychain encryption | **No** — OS-level encryption |
+| Layer | Can AI bypass? |
+|:------|:--------------|
+| Guardian hook (shell script) | **No** — deterministic |
+| Permission allowlist | **No** — evaluated by Claude Code |
+| Decision framework | In theory — Guardian catches it |
+| Credential store | **No** — OS-level encryption |
 
-### Self-Tightening Safety
+### Self-Tightening
 
-When Autopilot learns a new service, it appends safety rules to the Guardian's custom rules file. The system can only get **more restrictive**, never less:
-- Custom rules are **append-only** — the AI can add rules but never remove them
-- The Guardian script itself is **immutable** — the AI cannot modify it
-- The MCP whitelist is **additive** — entries are added, never removed
+The system only gets **more restrictive**:
+- Custom rules are **append-only**
+- Guardian script is **immutable**
+- MCP whitelist is **additive only**
+
+</td>
+</tr>
+</table>
 
 ---
 
 ## Self-Expansion
 
-Autopilot grows its own capabilities. When it encounters a service not in the registry:
-
 ```
-1. Detects missing service registry file
-2. Checks MCP whitelist — installs silently if whitelisted
-3. WebSearches the service's CLI and API docs
-4. Fetches official documentation
-5. Creates a new service registry file from template
-6. Identifies dangerous operations -> appends Guardian rules
-7. Installs CLI tool if one exists
-8. Acquires credentials via browser automation
-9. Continues with the original task
-```
-
-No interruption. The only pause points are first-time login credentials and 2FA codes.
-
-### Adding a Service Manually
-
-Copy the template and fill it in:
-
-```bash
-cp ~/MCPs/autopilot/services/_template.md ~/MCPs/autopilot/services/my-service.md
-```
-
-Each service file documents: credentials needed, CLI tool, common operations, browser fallback steps, and 2FA handling.
-
-### Adding Guardian Rules
-
-Append to the custom rules file (the AI does this automatically for new services):
-
-```bash
-echo 'CATEGORY|regex_pattern|Human-readable reason' >> ~/MCPs/autopilot/config/guardian-custom-rules.txt
+Unknown service detected
+        |
+        v
+  Check MCP whitelist ──> Install silently if whitelisted
+        |
+        v
+  WebSearch CLI + API docs
+        |
+        v
+  Create service registry file
+        |
+        v
+  Append Guardian safety rules
+        |
+        v
+  Install CLI tool
+        |
+        v
+  Acquire credentials (browser or primary email)
+        |
+        v
+  Continue with original task
 ```
 
-### Adding Trusted MCPs
-
-Edit `~/MCPs/autopilot/config/trusted-mcps.yaml` and add to the `whitelisted` section. Autopilot installs whitelisted MCPs silently when needed.
+No interruption. Only pauses for 2FA codes and first-time primary credentials.
 
 ---
 
 ## How It Compares
 
 | Capability | Autopilot | Devin | Cursor Agents | Claude Code (vanilla) |
-|---|---|---|---|---|
-| Autonomous deployment | Yes (CLI + browser) | Yes (sandbox) | Yes (VM) | Needs permission each time |
-| Browser credential acquisition | Yes (Playwright) | Partial | Partial | No |
-| Hard safety rails | Yes (Guardian hook) | No (sandbox only) | No (sandbox only) | Partial (permission prompts) |
-| Self-expanding service knowledge | Yes | No | No | No |
-| MCP auto-discovery | Yes (whitelist-based) | No (no MCP) | Partial | No |
-| Credential vault | Yes (OS-native: Keychain / libsecret / Credential Manager) | Session-scoped | VM-scoped | No built-in |
-| Smart auto-approve | Yes (Guardian + allowlist) | N/A (sandbox) | N/A (sandbox) | Manual approval |
-| Append-only safety expansion | Yes | No | No | No |
-| Open source | Yes (MIT) | No | No | Yes (CLI, not agents) |
+|:-----------|:----------|:------|:--------------|:---------------------|
+| Autonomous deployment | Yes (CLI + browser) | Yes (sandbox) | Yes (VM) | Needs permission |
+| Browser credential acquisition | Yes (Playwright CDP) | Partial | Partial | No |
+| Hard safety rails | Yes (Guardian) | Sandbox only | Sandbox only | Permission prompts |
+| Self-expanding knowledge | Yes | No | No | No |
+| MCP auto-discovery | Yes (whitelist) | No | Partial | No |
+| Credential vault | Yes (OS-native) | Session-scoped | VM-scoped | No |
+| Append-only safety | Yes | No | No | No |
+| Cross-platform | macOS, Linux, Windows | Cloud only | Cloud only | Yes |
+| Open source | Yes (MIT) | No | No | CLI only |
 
 ---
 
 ## Limitations
 
-### Hard Blockers (cannot automate)
-- **2FA/MFA codes** — sent to your phone, no way to intercept
-- **CAPTCHAs** — can't solve image challenges
-- **Account creation** — requires email verification
-- **Payment method setup** — PCI-compliant forms resist automation
+**Hard blockers** (cannot automate):
+- 2FA/MFA codes — sent to your phone
+- CAPTCHAs — can't solve image challenges
+- Email verification — requires inbox access
+- PCI-compliant payment forms — resist automation
 
-### Technical
-- **Chrome CDP needs to be running** — The persistent Chrome must be started before using browser features: `~/MCPs/autopilot/bin/chrome-debug.sh start`. The installer does this automatically, but after a system reboot you may need to start it again.
-- **Browser UIs change** — Playwright steps in service registry can break when dashboards redesign
-- **New MCPs need a restart** — installed MCPs take effect next Claude Code session
-- **No automatic rollback** — if a deploy goes wrong, you fix it manually
+**Technical:**
+- Chrome CDP needs to be running (`chrome-debug.sh start` — installer does this automatically)
+- Browser UIs change — Playwright steps can break when dashboards redesign
+- New MCPs need a session restart to take effect
 
 ---
 
 ## Contributing
 
-### Add a Service
-
-The most impactful contribution. Copy `services/_template.md`, fill in the CLI commands, browser steps, and auth flow for a service you use.
-
-### Expand the Guardian
-
-Find a dangerous command pattern that isn't caught? Add it to the test suite in `bin/test-guardian.sh` and either add it to `bin/guardian.sh` (built-in) or `config/guardian-custom-rules.txt` (custom).
-
-### Add Trusted MCPs
-
-Found a well-maintained MCP server from a verified publisher? Add it to the `whitelisted` section in `config/trusted-mcps.yaml`.
-
-### Port to Linux/Windows
-
-The main blocker is `keychain.sh` which uses macOS `security` command. A Linux port would use `secret-tool` (libsecret) or `pass`. Windows would use Windows Credential Manager.
+| Contribution | Impact |
+|:-------------|:-------|
+| **Add a service** | Copy `services/_template.md`, fill in CLI commands, auth flow |
+| **Expand Guardian** | Add patterns to `bin/guardian.sh` or `config/guardian-custom-rules.txt` |
+| **Add trusted MCPs** | Add to `whitelisted` section in `config/trusted-mcps.yaml` |
+| **Improve tests** | Add test cases to `bin/test-guardian.sh` |
 
 ---
 
-## License
-
-MIT
+<p align="center">
+  <strong>MIT License</strong> &bull; Built for developers who'd rather code than configure
+</p>
