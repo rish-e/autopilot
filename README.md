@@ -174,8 +174,8 @@ cd autopilot
 ## Usage
 
 ```bash
-# Start Autopilot
-claude --agent autopilot
+# Start Autopilot (recommended — Guardian provides the safety rails)
+claude --agent autopilot --dangerously-skip-permissions
 
 # Deploy and host
 > Deploy this to Vercel with environment variables from Supabase
