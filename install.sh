@@ -361,23 +361,23 @@ jq --arg url "$CDP_URL" '.browser.cdpEndpoint = $url' \
     "$PLAYWRIGHT_CONFIG" > "$PLAYWRIGHT_CONFIG.tmp" && mv "$PLAYWRIGHT_CONFIG.tmp" "$PLAYWRIGHT_CONFIG"
 ok "Playwright config updated with CDP endpoint: $CDP_URL"
 
-# Configure Playwright MCP in Claude Code to use our config
+# Configure Playwright MCP in Claude Code to connect via CDP
 if [ -f "$CLAUDE_JSON" ]; then
     if jq -e '.mcpServers.playwright' "$CLAUDE_JSON" &>/dev/null; then
         CURRENT_ARGS=$(jq -r '.mcpServers.playwright.args // [] | join(" ")' "$CLAUDE_JSON")
-        if echo "$CURRENT_ARGS" | grep -q "playwright-config.json"; then
-            ok "Playwright MCP already using autopilot config"
+        if echo "$CURRENT_ARGS" | grep -q "cdp-endpoint"; then
+            ok "Playwright MCP already using CDP endpoint"
         else
-            jq --arg config "$PLAYWRIGHT_CONFIG" \
-                '.mcpServers.playwright.args = (.mcpServers.playwright.args + ["--config", $config])' \
+            jq --arg url "$CDP_URL" \
+                '.mcpServers.playwright = {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--cdp-endpoint",$url],"env":{}}' \
                 "$CLAUDE_JSON" > "$CLAUDE_JSON.tmp" && mv "$CLAUDE_JSON.tmp" "$CLAUDE_JSON"
-            ok "Playwright MCP updated with CDP config"
+            ok "Playwright MCP updated with CDP endpoint"
         fi
     else
-        jq --arg config "$PLAYWRIGHT_CONFIG" \
-            '.mcpServers.playwright = {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--config",$config],"env":{}}' \
+        jq --arg url "$CDP_URL" \
+            '.mcpServers.playwright = {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--cdp-endpoint",$url],"env":{}}' \
             "$CLAUDE_JSON" > "$CLAUDE_JSON.tmp" && mv "$CLAUDE_JSON.tmp" "$CLAUDE_JSON"
-        ok "Playwright MCP added with CDP config"
+        ok "Playwright MCP added with CDP endpoint"
     fi
 else
     cat > "$CLAUDE_JSON" << CLAUDEJSON
@@ -386,7 +386,7 @@ else
     "playwright": {
       "type": "stdio",
       "command": "npx",
-      "args": ["@playwright/mcp@latest", "--config", "$PLAYWRIGHT_CONFIG"],
+      "args": ["@playwright/mcp@latest", "--cdp-endpoint", "$CDP_URL"],
       "env": {}
     }
   }
