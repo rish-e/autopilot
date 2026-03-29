@@ -106,14 +106,34 @@ Snapshot: pre-supabase-vercel (run snapshot.sh rollback to undo)
 
 Status updates are fine. Stopping to ask is not. The user said "proceed" once — that covers everything in the plan.
 
-### Prerequisites (resolved during planning, not as separate steps)
+### Pre-Flight Checks (resolved during planning, before the user sees anything)
 
-Before presenting the plan (Flow B) or starting execution (Flow A), silently check:
-- **CLIs installed?** If not, include installation as a plan step.
-- **Credentials in keychain?** If not, include credential acquisition as a plan step.
-- **Service registry exists?** If not, include self-expansion as a plan step.
+Before presenting the plan (Flow B) or starting execution (Flow A), silently run ALL of these checks:
 
-The user should see a clean plan of what will happen, not a checklist of internal checks.
+1. **Service registry exists?** For every service the task involves, check if `~/MCPs/autopilot/services/{service}.md` exists. If not, research the service NOW (WebSearch for docs, auth requirements, CLI tools, CAPTCHA presence) and create the registry file before planning. This ensures you know every auth wall, interactive login, and CAPTCHA before presenting the plan.
+
+2. **CLIs installed?** Check `which {tool}` for every CLI the task needs. If missing, include installation as a plan step.
+
+3. **Credentials in keychain?** For EVERY service in the plan, check:
+   - `keychain.sh has {service} api-token` (or whatever key the service registry says is needed)
+   - `keychain.sh has primary email` and `keychain.sh has primary password`
+   - Check `~/.npmrc` for npm tokens, `~/.docker/config.json` for Docker, etc.
+
+   For each missing credential, determine HOW it can be obtained:
+   - **Automatable**: browser signup with primary creds, CLI auth flow → include as a plan step
+   - **Interactive**: requires human input (e.g., `npm login`, 2FA setup) → flag as "⚠ Requires your input" in the plan
+   - **Blocked**: CAPTCHA, manual approval → flag as "⚠ Manual step" in the plan
+
+4. **Flag blockers upfront.** If any step requires human input, put it FIRST in the plan and mark it clearly. Never bury an interactive step at step 7 of 12 where a failure cascades to everything after it.
+
+5. **Show dependencies.** If steps 3-6 all depend on step 2 (getting a credential), say so in the plan:
+   ```
+   1. [⚠ Your input needed] Run `npm login` in your terminal
+   2. Publish to npm (depends on step 1)
+   3. Submit to registry (depends on step 2)
+   ```
+
+The user should see a clean plan that surfaces every potential blocker BEFORE they say "proceed."
 
 ---
 
@@ -195,6 +215,41 @@ echo "{value}" | ~/MCPs/autopilot/bin/keychain.sh set {service} {key}
 # Check existence
 ~/MCPs/autopilot/bin/keychain.sh has {service} {key}
 ```
+
+### Post-Login Token Harvesting
+
+When the user completes an interactive login (like `npm login`, `docker login`, `gh auth login`), immediately harvest the token and store it in keychain so the user never has to log in again:
+
+```bash
+# npm: after user runs `npm login`, token lands in ~/.npmrc
+TOKEN=$(grep '//registry.npmjs.org/:_authToken=' ~/.npmrc 2>/dev/null | cut -d= -f2)
+if [ -n "$TOKEN" ]; then
+    echo "$TOKEN" | ~/MCPs/autopilot/bin/keychain.sh set npm auth-token
+fi
+
+# Docker: after `docker login`, creds land in ~/.docker/config.json
+# Read the auth field for the relevant registry and store in keychain
+
+# gh: after `gh auth login`, token is in gh's config
+TOKEN=$(gh auth token 2>/dev/null)
+if [ -n "$TOKEN" ]; then
+    echo "$TOKEN" | ~/MCPs/autopilot/bin/keychain.sh set github auth-token
+fi
+```
+
+**When to harvest:**
+- After any plan step marked as "⚠ Requires your input" completes
+- When the user says "done" or "I logged in" after an interactive step
+- On first encounter with a service where a config file already has a token (harvest it into keychain immediately)
+
+**Always harvest from these locations on first run:**
+- `~/.npmrc` → npm token
+- `~/.docker/config.json` → Docker registry tokens
+- `gh auth token` → GitHub token
+- `~/.config/supabase/access-token` → Supabase token
+- `~/.netrc` → any service tokens stored there
+
+This means if the user has EVER logged into a service before installing Autopilot, we pick up that credential automatically.
 
 ### Hard Rules
 - **NEVER** print, echo, log, or display credential values
