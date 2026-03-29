@@ -12,6 +12,7 @@
 #   chrome-debug.sh restart     # Stop + start
 #   chrome-debug.sh url         # Print the CDP endpoint URL
 #   chrome-debug.sh clean-locks # Remove stale Playwright/Chrome lock files
+#   chrome-debug.sh reset       # Full reset: stop, wipe profile, clean locks, start fresh
 
 set -euo pipefail
 
@@ -235,6 +236,41 @@ cmd_clean_locks() {
     fi
 }
 
+cmd_reset() {
+    echo "Resetting Chrome CDP (full profile wipe)..."
+
+    # Stop any running instance
+    cmd_stop 2>/dev/null
+
+    # Kill anything on our port
+    local pids
+    pids=$(lsof -ti ":${CDP_PORT}" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+        echo "$pids" | xargs kill 2>/dev/null || true
+        sleep 1
+    fi
+
+    # Also kill any chrome using our profile
+    pids=$(pgrep -f "browser-profile" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+        echo "$pids" | xargs kill 2>/dev/null || true
+        sleep 1
+    fi
+
+    # Wipe profile but keep .gitkeep
+    if [ -d "$PROFILE_DIR" ]; then
+        find "$PROFILE_DIR" -not -name '.gitkeep' -not -name '.' -not -name '..' -maxdepth 1 -exec rm -rf {} + 2>/dev/null
+        echo "Profile wiped: $PROFILE_DIR"
+    fi
+
+    # Clean all lock files
+    cmd_clean_locks
+
+    # Start fresh
+    echo ""
+    cmd_start
+}
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 case "${1:-status}" in
@@ -244,11 +280,21 @@ case "${1:-status}" in
     restart)     cmd_restart ;;
     url)         cmd_url ;;
     clean-locks) cmd_clean_locks ;;
+    reset)       cmd_reset ;;
     *)
-        echo "Usage: chrome-debug.sh {start|stop|status|restart|url|clean-locks}"
+        echo "Usage: chrome-debug.sh {start|stop|status|restart|url|clean-locks|reset}"
         echo ""
         echo "Manages a persistent Chrome instance with Chrome DevTools Protocol."
         echo "Playwright MCP connects to this instead of launching its own browser."
+        echo ""
+        echo "Commands:"
+        echo "  start       Launch Chrome with CDP on port ${CDP_PORT}"
+        echo "  stop        Stop the Chrome instance"
+        echo "  status      Check if Chrome CDP is running"
+        echo "  restart     Stop + clean locks + start"
+        echo "  url         Print the CDP endpoint URL"
+        echo "  clean-locks Remove stale browser lock files"
+        echo "  reset       Full reset: stop, wipe profile, clean locks, start fresh"
         exit 2
         ;;
 esac
