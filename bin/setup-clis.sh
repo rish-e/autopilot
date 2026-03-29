@@ -67,10 +67,16 @@ pkg_install() {
             if [ -n "$brew_pkg" ] && has scoop; then
                 scoop install "$brew_pkg" 2>/dev/null && { echo -e "${GREEN}[OK]${NC} $name installed via scoop"; return; }
             fi
+            if has choco; then
+                choco install -y "$brew_pkg" 2>/dev/null && { echo -e "${GREEN}[OK]${NC} $name installed via choco"; return; }
+            fi
+            if has winget; then
+                winget install --accept-package-agreements --accept-source-agreements "$brew_pkg" 2>/dev/null && { echo -e "${GREEN}[OK]${NC} $name installed via winget"; return; }
+            fi
             ;;
     esac
 
-    echo -e "${RED}[FAILED]${NC} $name — install manually"
+    echo -e "${YELLOW}[SKIPPED]${NC} $name — will be installed on-demand when needed"
 }
 
 check_only() {

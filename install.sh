@@ -119,63 +119,210 @@ if ! command -v claude &>/dev/null; then
 fi
 ok "Claude Code installed"
 
-# Platform-specific prerequisites
+# ─── Install Core Dependencies ────────────────────────────────────────────
+# Everything Autopilot needs gets installed here. The user should never have
+# to install anything manually.
+
+info "Installing dependencies (this may take a minute on first run)..."
+
+# --- Package Manager ---
 case "$PLATFORM" in
     macos)
         if ! command -v brew &>/dev/null; then
-            warn "Homebrew not found. Installing..."
-            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            info "Installing Homebrew..."
+            # Use NONINTERACTIVE to avoid prompts
+            NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" 2>/dev/null || true
+            # Add brew to PATH for Apple Silicon and Intel
+            if [ -f /opt/homebrew/bin/brew ]; then
+                eval "$(/opt/homebrew/bin/brew shellenv)"
+            elif [ -f /usr/local/bin/brew ]; then
+                eval "$(/usr/local/bin/brew shellenv)"
+            fi
         fi
-        ok "Homebrew available"
+        if command -v brew &>/dev/null; then
+            ok "Homebrew available"
+            HAS_BREW=true
+        else
+            warn "Homebrew could not be installed (may need admin access)"
+            warn "Autopilot will use npm and direct downloads as fallback"
+            HAS_BREW=false
+        fi
         ;;
     linux|wsl)
         # Check for credential store
         if ! command -v secret-tool &>/dev/null; then
-            warn "secret-tool not found. Installing libsecret-tools..."
+            info "Installing credential store (libsecret-tools)..."
             if command -v apt-get &>/dev/null; then
-                sudo apt-get install -y libsecret-tools
+                sudo apt-get install -y libsecret-tools 2>/dev/null || true
             elif command -v dnf &>/dev/null; then
-                sudo dnf install -y libsecret
+                sudo dnf install -y libsecret 2>/dev/null || true
             elif command -v pacman &>/dev/null; then
-                sudo pacman -S --noconfirm libsecret
-            else
-                warn "Could not install secret-tool automatically. Install libsecret-tools manually."
+                sudo pacman -S --noconfirm libsecret 2>/dev/null || true
             fi
         fi
         if command -v secret-tool &>/dev/null; then
-            ok "secret-tool available (credential store)"
+            ok "Credential store available (secret-tool)"
         else
             warn "secret-tool not available — credentials will need manual configuration"
         fi
+        HAS_BREW=false
+        if command -v brew &>/dev/null; then HAS_BREW=true; fi
         ;;
     windows)
-        # cmdkey is built into Windows
         if command -v cmdkey.exe &>/dev/null || command -v cmdkey &>/dev/null; then
-            ok "Windows Credential Manager available"
+            ok "Credential store available (Windows Credential Manager)"
         else
             warn "cmdkey not found — ensure Windows system tools are in PATH"
         fi
+        HAS_BREW=false
         ;;
 esac
 
-# Check Node.js
+# --- Node.js ---
 if ! command -v node &>/dev/null; then
-    warn "Node.js not found. Installing..."
+    info "Installing Node.js..."
     case "$PLATFORM" in
-        macos) brew install node ;;
-        linux|wsl) pkg_install "nodejs" || pkg_install "node" ;;
-        windows) pkg_install "nodejs" ;;
+        macos)
+            if [ "$HAS_BREW" = true ]; then
+                brew install node 2>/dev/null
+            else
+                # Direct download fallback
+                curl -fsSL https://nodejs.org/dist/v20.18.0/node-v20.18.0.pkg -o /tmp/node.pkg && \
+                    sudo installer -pkg /tmp/node.pkg -target / 2>/dev/null && rm -f /tmp/node.pkg || true
+            fi
+            ;;
+        linux|wsl)
+            # Try NodeSource first (most reliable), then package managers
+            curl -fsSL https://deb.nodesource.com/setup_20.x 2>/dev/null | sudo -E bash - 2>/dev/null && \
+                sudo apt-get install -y nodejs 2>/dev/null || \
+                pkg_install "nodejs" || pkg_install "node" || true
+            ;;
+        windows) pkg_install "nodejs" || true ;;
     esac
 fi
-ok "Node.js $(node --version)"
+if command -v node &>/dev/null; then
+    ok "Node.js $(node --version)"
+else
+    fail "Node.js could not be installed. Install it from https://nodejs.org and re-run the installer."
+    exit 1
+fi
 
-# Check jq
+# --- jq ---
 if ! command -v jq &>/dev/null; then
     info "Installing jq..."
-    pkg_install "jq" || warn "Could not install jq — install manually"
+    case "$PLATFORM" in
+        macos)
+            if [ "$HAS_BREW" = true ]; then
+                brew install jq 2>/dev/null
+            else
+                # Direct binary download
+                curl -fsSL "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-macos-arm64" -o /usr/local/bin/jq 2>/dev/null && \
+                    chmod +x /usr/local/bin/jq || \
+                curl -fsSL "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-macos-amd64" -o /usr/local/bin/jq 2>/dev/null && \
+                    chmod +x /usr/local/bin/jq || true
+            fi
+            ;;
+        linux|wsl)
+            if command -v apt-get &>/dev/null; then
+                sudo apt-get install -y jq 2>/dev/null
+            elif command -v dnf &>/dev/null; then
+                sudo dnf install -y jq 2>/dev/null
+            elif command -v pacman &>/dev/null; then
+                sudo pacman -S --noconfirm jq 2>/dev/null
+            else
+                # Direct binary
+                curl -fsSL "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64" -o /usr/local/bin/jq 2>/dev/null && \
+                    chmod +x /usr/local/bin/jq || true
+            fi
+            ;;
+        windows) pkg_install "jq" || true ;;
+    esac
 fi
 if command -v jq &>/dev/null; then
     ok "jq available"
+else
+    fail "jq could not be installed. The guardian safety hook requires it."
+    fail "Install it from https://jqlang.github.io/jq/download/ and re-run the installer."
+    exit 1
+fi
+
+# --- Google Chrome (needed for browser automation) ---
+find_chrome() {
+    case "$PLATFORM" in
+        macos)
+            if [ -d "/Applications/Google Chrome.app" ]; then echo "found"; return; fi
+            if [ -d "$HOME/Applications/Google Chrome.app" ]; then echo "found"; return; fi
+            ;;
+        linux|wsl)
+            if command -v google-chrome &>/dev/null || command -v google-chrome-stable &>/dev/null || command -v chromium-browser &>/dev/null || command -v chromium &>/dev/null; then
+                echo "found"; return
+            fi
+            ;;
+        windows)
+            if [ -f "/c/Program Files/Google/Chrome/Application/chrome.exe" ] || [ -f "/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" ]; then
+                echo "found"; return
+            fi
+            if command -v chrome.exe &>/dev/null; then echo "found"; return; fi
+            ;;
+    esac
+    echo "missing"
+}
+
+if [ "$(find_chrome)" = "found" ]; then
+    ok "Google Chrome found"
+else
+    info "Installing Google Chrome (needed for browser automation)..."
+    case "$PLATFORM" in
+        macos)
+            if [ "$HAS_BREW" = true ]; then
+                brew install --cask google-chrome 2>/dev/null && ok "Chrome installed via brew" || true
+            fi
+            # Fallback: direct DMG download
+            if [ "$(find_chrome)" = "missing" ]; then
+                curl -fsSL "https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg" -o /tmp/chrome.dmg 2>/dev/null && \
+                    hdiutil attach /tmp/chrome.dmg -quiet 2>/dev/null && \
+                    cp -R "/Volumes/Google Chrome/Google Chrome.app" /Applications/ 2>/dev/null && \
+                    hdiutil detach "/Volumes/Google Chrome" -quiet 2>/dev/null && \
+                    rm -f /tmp/chrome.dmg && \
+                    ok "Chrome installed via direct download" || true
+            fi
+            ;;
+        linux|wsl)
+            if command -v apt-get &>/dev/null; then
+                curl -fsSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o /tmp/chrome.deb 2>/dev/null && \
+                    sudo apt-get install -y /tmp/chrome.deb 2>/dev/null && \
+                    rm -f /tmp/chrome.deb && \
+                    ok "Chrome installed" || true
+            fi
+            # Fallback to chromium
+            if [ "$(find_chrome)" = "missing" ]; then
+                if command -v apt-get &>/dev/null; then
+                    sudo apt-get install -y chromium-browser 2>/dev/null || sudo apt-get install -y chromium 2>/dev/null || true
+                elif command -v dnf &>/dev/null; then
+                    sudo dnf install -y chromium 2>/dev/null || true
+                elif command -v pacman &>/dev/null; then
+                    sudo pacman -S --noconfirm chromium 2>/dev/null || true
+                fi
+                if [ "$(find_chrome)" = "found" ]; then ok "Chromium installed as Chrome alternative"; fi
+            fi
+            ;;
+        windows)
+            if command -v winget &>/dev/null; then
+                winget install --accept-package-agreements --accept-source-agreements Google.Chrome 2>/dev/null && \
+                    ok "Chrome installed via winget" || true
+            elif command -v choco &>/dev/null; then
+                choco install -y googlechrome 2>/dev/null && ok "Chrome installed via choco" || true
+            fi
+            ;;
+    esac
+
+    if [ "$(find_chrome)" = "found" ]; then
+        ok "Google Chrome ready"
+    else
+        warn "Chrome could not be installed automatically"
+        warn "Install it from https://google.com/chrome — browser automation won't work without it"
+        warn "Autopilot will still work for CLI-only tasks"
+    fi
 fi
 
 # ─── Install Files ──────────────────────────────────────────────────────────
