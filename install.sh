@@ -370,6 +370,7 @@ cp -f "$SOURCE_DIR/bin/keychain.sh" "$INSTALL_DIR/bin/"
 cp -f "$SOURCE_DIR/bin/guardian.sh" "$INSTALL_DIR/bin/"
 cp -f "$SOURCE_DIR/bin/setup-clis.sh" "$INSTALL_DIR/bin/"
 cp -f "$SOURCE_DIR/bin/test-guardian.sh" "$INSTALL_DIR/bin/"
+cp -f "$SOURCE_DIR/bin/chrome-debug.sh" "$INSTALL_DIR/bin/"
 cp -f "$SOURCE_DIR/bin/audit.sh" "$INSTALL_DIR/bin/"
 cp -f "$SOURCE_DIR/bin/snapshot.sh" "$INSTALL_DIR/bin/"
 cp -f "$SOURCE_DIR/bin/session.sh" "$INSTALL_DIR/bin/"
@@ -411,19 +412,41 @@ ok "Scripts made executable"
 
 info "Configuring guardian hook..."
 
+# Guardian hooks for Bash, Write, and Edit tools
+GUARDIAN_CMD="$INSTALL_DIR/bin/guardian.sh"
+GUARDIAN_HOOKS='[
+  {"matcher":"Bash","hooks":[{"type":"command","command":"GUARDIAN_PATH","timeout":10}]},
+  {"matcher":"Write","hooks":[{"type":"command","command":"GUARDIAN_PATH","timeout":10}]},
+  {"matcher":"Edit","hooks":[{"type":"command","command":"GUARDIAN_PATH","timeout":10}]}
+]'
+GUARDIAN_HOOKS=$(echo "$GUARDIAN_HOOKS" | sed "s|GUARDIAN_PATH|$GUARDIAN_CMD|g")
+
 if [ -f "$SETTINGS_FILE" ]; then
     if jq -e '.hooks.PreToolUse' "$SETTINGS_FILE" &>/dev/null; then
+        # Check if guardian is already configured
         if jq -e '.hooks.PreToolUse[] | select(.hooks[].command | contains("guardian.sh"))' "$SETTINGS_FILE" &>/dev/null; then
-            ok "Guardian hook already configured"
+            # Check if Write/Edit hooks exist too
+            HOOK_COUNT=$(jq '[.hooks.PreToolUse[] | select(.hooks[].command | contains("guardian.sh"))] | length' "$SETTINGS_FILE")
+            if [ "$HOOK_COUNT" -ge 3 ]; then
+                ok "Guardian hooks already configured (Bash + Write + Edit)"
+            else
+                # Remove old guardian hooks, add all three
+                jq --argjson hooks "$GUARDIAN_HOOKS" \
+                    '.hooks.PreToolUse = ([.hooks.PreToolUse[] | select(.hooks[].command | contains("guardian.sh") | not)] + $hooks)' \
+                    "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+                ok "Guardian hooks updated (added Write + Edit protection)"
+            fi
         else
-            jq '.hooks.PreToolUse += [{"matcher":"Bash","hooks":[{"type":"command","command":"'"$INSTALL_DIR"'/bin/guardian.sh","timeout":10}]}]' \
+            jq --argjson hooks "$GUARDIAN_HOOKS" \
+                '.hooks.PreToolUse += $hooks' \
                 "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
-            ok "Guardian hook added to existing hooks"
+            ok "Guardian hooks added (Bash + Write + Edit)"
         fi
     else
-        jq '. + {"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"'"$INSTALL_DIR"'/bin/guardian.sh","timeout":10}]}]}}' \
+        jq --argjson hooks "$GUARDIAN_HOOKS" \
+            '. + {"hooks":{"PreToolUse":$hooks}}' \
             "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
-        ok "Guardian hook configured"
+        ok "Guardian hooks configured (Bash + Write + Edit)"
     fi
 else
     cat > "$SETTINGS_FILE" << SETTINGS
@@ -432,19 +455,21 @@ else
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$INSTALL_DIR/bin/guardian.sh",
-            "timeout": 10
-          }
-        ]
+        "hooks": [{"type": "command", "command": "$GUARDIAN_CMD", "timeout": 10}]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [{"type": "command", "command": "$GUARDIAN_CMD", "timeout": 10}]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [{"type": "command", "command": "$GUARDIAN_CMD", "timeout": 10}]
       }
     ]
   }
 }
 SETTINGS
-    ok "Guardian hook configured (new settings.json)"
+    ok "Guardian hooks configured (new settings.json)"
 fi
 
 # ─── Configure Permissions ─────────────────────────────────────────────────

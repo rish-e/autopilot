@@ -28,7 +28,7 @@ fi
 # Read tool call from stdin
 INPUT=$(cat)
 
-# Only inspect Bash commands — allow everything else through
+# Parse tool name
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
 if [ -z "$TOOL_NAME" ]; then
     # Failed to parse — fail closed
@@ -36,6 +36,31 @@ if [ -z "$TOOL_NAME" ]; then
     exit 2
 fi
 
+# =============================================================================
+# WRITE/EDIT TOOL PROTECTION
+# =============================================================================
+# Protect critical files from modification via Write and Edit tools.
+# These tools bypass Bash entirely, so we must check them here.
+
+if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
+    FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+    if [ -n "$FILE_PATH" ]; then
+        # Block modifications to guardian and safety-critical files
+        case "$FILE_PATH" in
+            */guardian.sh|*/guardian-custom-rules.txt)
+                echo "GUARDIAN BLOCKED [SELF-PROTECT]: Cannot modify guardian safety files via $TOOL_NAME tool" >&2
+                exit 2
+                ;;
+            */.claude/settings.json|*/.claude/settings.local.json)
+                echo "GUARDIAN BLOCKED [SELF-PROTECT]: Cannot modify Claude Code settings via $TOOL_NAME tool (could disable guardian hook)" >&2
+                exit 2
+                ;;
+        esac
+    fi
+    exit 0
+fi
+
+# Only inspect Bash commands — allow everything else through
 if [ "$TOOL_NAME" != "Bash" ]; then
     exit 0
 fi
@@ -61,7 +86,32 @@ block() {
 }
 
 # =============================================================================
-# CATEGORY 0: OBFUSCATION / INTERPRETER EVASION
+# CATEGORY 0: GUARDIAN SELF-PROTECTION
+# =============================================================================
+# The guardian must protect itself. If these files are modified, the entire
+# safety system can be disabled. Block ALL modification attempts.
+
+GUARDIAN_PROTECTED_FILES="guardian\.sh|guardian-custom-rules\.txt|settings\.json|settings\.local\.json"
+
+# Block any modification of guardian or settings files via common tools
+if echo "$COMMAND" | grep -qE "(sed|awk|perl|tee|truncate|mv|cp|chmod|chown|ln|install)\s.*($GUARDIAN_PROTECTED_FILES)"; then
+    block "SELF-PROTECT" "Modifying guardian or settings files is not allowed"
+fi
+# Block rm/unlink on guardian files
+if echo "$COMMAND" | grep -qE "(rm|unlink)\s.*($GUARDIAN_PROTECTED_FILES)"; then
+    block "SELF-PROTECT" "Deleting guardian or settings files is not allowed"
+fi
+# Block redirect/overwrite into guardian files
+if echo "$COMMAND" | grep -qE ">\s*.*($GUARDIAN_PROTECTED_FILES)"; then
+    block "SELF-PROTECT" "Overwriting guardian or settings files is not allowed"
+fi
+# Block chmod -x on any .sh file in the autopilot bin directory
+if echo "$COMMAND" | grep -qE "chmod\s+(-[a-zA-Z]*)?(a-x|u-x|-x|000|644)\s.*(autopilot|MCPs).*bin/.*\.sh"; then
+    block "SELF-PROTECT" "Removing execute permission from autopilot scripts is not allowed"
+fi
+
+# =============================================================================
+# CATEGORY 1: OBFUSCATION / INTERPRETER EVASION
 # =============================================================================
 # These block attempts to bypass the guardian by encoding commands or using
 # alternative interpreters. Must come first — before pattern-specific checks.
@@ -80,6 +130,19 @@ if echo "$CMD_LOWER" | grep -qE '(^|\s|;|&&|\|)(bash|sh|zsh|dash)\s+-c\s'; then
 fi
 if echo "$CMD_LOWER" | grep -qE '(^|\s|;|&&|\|)eval\s'; then
     block "EVASION" "eval can execute arbitrary code. Run the command directly instead."
+fi
+
+# source / dot-source (can execute arbitrary scripts bypassing guardian)
+if echo "$CMD_LOWER" | grep -qE '(^|\s|;|&&|\|)(source|\.) '; then
+    block "EVASION" "source/dot-source can execute arbitrary scripts — bypasses guardian. Run commands directly instead."
+fi
+
+# Heredoc piped to shell interpreter
+if echo "$CMD_LOWER" | grep -qE '<<.*\|\s*(bash|sh|zsh|dash)'; then
+    block "EVASION" "Heredoc piped to shell interpreter — bypasses guardian"
+fi
+if echo "$CMD_LOWER" | grep -qE 'cat\s+<<.*\|\s*(bash|sh|zsh|dash)'; then
+    block "EVASION" "Heredoc piped to shell interpreter — bypasses guardian"
 fi
 
 # Python/Node/Ruby/Perl os.system or exec (interpreter bypass)
@@ -133,14 +196,28 @@ fi
 # CATEGORY 2: CREDENTIAL EXFILTRATION
 # =============================================================================
 
+# Print/display credential values
 if echo "$COMMAND" | grep -qE '(echo|printf|cat)\s.*keychain\.sh\s+get'; then
     block "CREDENTIALS" "Credential value would be printed to stdout. Use subshell expansion instead: --token \"\$(keychain.sh get ...)\""
 fi
+# Send credentials to external URLs
 if echo "$COMMAND" | grep -qE '(curl|wget|http).*\$\(.*keychain\.sh\s+get'; then
     block "CREDENTIALS" "Credential value being sent to external URL. Use env var + CLI flag instead."
 fi
-if echo "$COMMAND" | grep -qE 'keychain\.sh\s+get.*[>|]\s*(.*\.env|.*\.json|.*\.yaml|.*\.yml|.*\.toml|.*\.cfg|.*\.conf|.*\.ini)'; then
-    block "CREDENTIALS" "Credential value being written to config file. Use keychain at runtime instead."
+if echo "$COMMAND" | grep -qE '\$\(.*keychain\.sh\s+get.*\).*(curl|wget|http)'; then
+    block "CREDENTIALS" "Credential value being sent to external URL. Use env var + CLI flag instead."
+fi
+# Redirect credentials to ANY file (not just config files)
+if echo "$COMMAND" | grep -qE 'keychain\.sh\s+get.*[>]'; then
+    block "CREDENTIALS" "Credential value being written to a file. Use keychain at runtime instead."
+fi
+# Pipe credentials to network tools or tee
+if echo "$COMMAND" | grep -qE 'keychain\.sh\s+get.*\|\s*(curl|wget|http|nc|ncat|netcat|socat|tee|mail|sendmail)'; then
+    block "CREDENTIALS" "Credential value being piped to network/output tool"
+fi
+# Block env/printenv/set that could dump exported credentials
+if echo "$CMD_LOWER" | grep -qE '(^|\s|;|&&|\|)(env|printenv|set)\s*($|\s*\||\s*>|;)'; then
+    block "CREDENTIALS" "env/printenv/set can expose exported credential values. Access specific variables directly instead."
 fi
 
 # =============================================================================
@@ -164,12 +241,9 @@ fi
 
 # Force push — but allow --force-with-lease (safer alternative)
 if echo "$COMMAND" | grep -qE 'git\s+push\s+.*--force-with-lease'; then
-    : # Allow --force-with-lease through
-elif echo "$COMMAND" | grep -qE 'git\s+push\s+.*(-f|--force)\b'; then
+    : # Allow --force-with-lease through (safe alternative)
+elif echo "$COMMAND" | grep -qE 'git\s+push\s+.*(-f\b|--force\b)'; then
     block "GIT" "Force push can destroy remote history. Use --force-with-lease if needed, or push normally."
-fi
-if echo "$COMMAND" | grep -qE 'git\s+push\s+-f\b'; then
-    block "GIT" "Force push can destroy remote history"
 fi
 if echo "$COMMAND" | grep -qE 'git\s+reset\s+--hard'; then
     block "GIT" "Hard reset discards all uncommitted changes. Commit or stash first."
