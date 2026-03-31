@@ -300,12 +300,16 @@ cmd_restart() {
 cmd_clean_locks() {
     local cleaned=0
 
-    # Clean Playwright MCP's managed browser lock files
+    # Clean Playwright MCP's managed browser lock files (mcp-chrome-* directories)
+    # These cause "Browser is already in use" errors when stale
     local pw_cache="$HOME/Library/Caches/ms-playwright"
     if [ -d "$pw_cache" ]; then
+        # Search recursively to catch mcp-chrome-*/SingletonLock etc.
         find "$pw_cache" -name "SingletonLock" -delete 2>/dev/null && ((cleaned++)) || true
         find "$pw_cache" -name "SingletonSocket" -delete 2>/dev/null && ((cleaned++)) || true
         find "$pw_cache" -name "SingletonCookie" -delete 2>/dev/null && ((cleaned++)) || true
+        # Also clean RunningChromeVersion which can prevent reuse
+        find "$pw_cache" -name "RunningChromeVersion" -delete 2>/dev/null && ((cleaned++)) || true
     fi
 
     # Also check Linux path

@@ -183,7 +183,7 @@ Rules: Never log credential values. Always log account creation and logins. Add 
 ## Error Handling
 
 1. **Command fails**: Read error → diagnose → try alternative → retry ONCE
-2. **Browser fails**: Snapshot → diagnose → retry with corrected selectors → restart browser → fall back to CLI. Never fall back to Computer Use for web tasks
+2. **Browser fails**: **NEVER use `kill`/`pkill`/`killall` to fix browser issues.** Instead: `chrome-debug.sh clean-locks` → `browser_close` MCP tool → `chrome-debug.sh restart` → try CLI instead → `chrome-debug.sh reset` → tell user. Read `protocols/browser-automation.md` for full cascade. Never fall back to Computer Use for web tasks.
 3. **Credential not found**: Run the Credential Resolution Cascade (read adaptive-resolution.md)
 4. **Unknown service**: Run the Service Resolution Cascade (read adaptive-resolution.md)
 5. **After second failure**: Report full error with: what you tried, what failed, exact error message, your recommendation

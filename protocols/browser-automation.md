@@ -49,14 +49,17 @@ When the browser IS needed:
 
 If a browser operation fails with "Target page, context or browser has been closed", "Browser is already in use", or similar:
 
-1. **Clean stale locks first**: run `~/MCPs/autopilot/bin/chrome-debug.sh clean-locks`. This removes Playwright/Chrome lock files that prevent browser reuse. NEVER use raw `rm` to delete lock files — always use this command.
-2. **Try to recover**: call `browser_close` to clean up, then retry the navigation ONCE. Sometimes only the page/context dies, not the whole browser — a close + reopen can recover it.
-3. **If retry fails**: DO NOT attempt to fix it further. Never run `kill`, `pkill`, `killall` on Playwright or MCP processes.
+**CRITICAL: NEVER run `kill`, `pkill`, or `killall` to fix browser issues. Always use `chrome-debug.sh` commands instead — they handle process cleanup safely and won't be blocked by guardian.**
+
+1. **Clean stale locks first**: run `~/MCPs/autopilot/bin/chrome-debug.sh clean-locks`. This removes Playwright/Chrome SingletonLock files (including in `~/Library/Caches/ms-playwright/`) that cause "Browser is already in use" errors. NEVER use raw `rm` or `pkill` — always use this command.
+2. **Try to recover**: call `browser_close` MCP tool to clean up, then retry the navigation ONCE. Sometimes only the page/context dies, not the whole browser — a close + reopen can recover it.
+3. **If "Browser is already in use" persists after clean-locks**: run `~/MCPs/autopilot/bin/chrome-debug.sh restart`. This stops Chrome via PID/port lookup (not pkill), cleans locks, and starts fresh. Then retry once.
 4. **Check if CLI can handle the task.** Most operations that use the browser have a CLI equivalent. Check if the required credential is already in keychain (`keychain.sh has {service} {key}`). If yes, switch to CLI and continue.
 5. **If CLI works** → switch to CLI, complete the task, include a brief note: "Browser context error, completed via CLI instead."
-6. **If browser is truly required** → restart Chrome automatically: `~/MCPs/autopilot/bin/chrome-debug.sh restart` (this also cleans locks). Then retry the operation once.
-7. **If profile is corrupted** (errors about "Something went wrong when opening your profile" or database locked errors) → run `~/MCPs/autopilot/bin/chrome-debug.sh reset`. This wipes the profile and starts fresh. Login sessions will be lost but credentials are safe in keychain.
-8. **Only tell the user** if all recovery paths fail. At that point, recommend they restart Claude Code so the Playwright MCP reconnects with fresh config.
+6. **If browser is truly required and restart didn't work** → run `~/MCPs/autopilot/bin/chrome-debug.sh reset`. This stops all Chrome processes on the CDP port, wipes the browser profile, cleans all locks, and starts fresh. Login sessions will be lost but credentials are safe in keychain.
+7. **Only tell the user** if all recovery paths fail. At that point, recommend they restart Claude Code so the Playwright MCP reconnects with fresh config.
+
+**Why not pkill?** Guardian blocks `pkill` commands targeting MCP-related processes to prevent accidentally killing MCP servers. The `chrome-debug.sh` commands handle browser process cleanup via PID files and port lookups, which is both safer and guardian-compatible.
 
 **Important:** Do NOT fall back to Computer Use for web-based tasks. Computer Use is exclusively for native desktop apps with no browser version. If Playwright fails for a web task, fix it within Playwright (retry selectors, restart browser, switch to CLI).
 
