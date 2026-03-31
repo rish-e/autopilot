@@ -2,6 +2,8 @@
 # Loaded on-demand by Autopilot when needed. Not part of the core prompt.
 # Location: ~/MCPs/autopilot/protocols/credential-management.md
 
+**HARD RULE: Never attempt any login or signup without primary credentials. Run preflight.sh first.**
+
 ## Credential Management
 
 ### Primary Credentials
@@ -18,7 +20,7 @@ echo "{email}" | ~/MCPs/autopilot/bin/keychain.sh set primary email
 echo "{password}" | ~/MCPs/autopilot/bin/keychain.sh set primary password
 ```
 
-**First-time setup**: If no primary credentials exist when the agent first needs them, ask the user ONCE: "I need a primary email and password to use for signing up to services. I'll store these in your macOS Keychain." Store them, then never ask again.
+**First-time setup**: If no primary credentials exist when the agent first needs them, run `~/MCPs/autopilot/bin/preflight.sh setup` which will interactively collect the email and password and store them in macOS Keychain. This only happens once.
 
 ### Username Preferences
 

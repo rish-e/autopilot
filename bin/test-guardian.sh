@@ -219,6 +219,18 @@ test_block "cat append custom rules"     'cat /tmp/rules >> ~/MCPs/autopilot/con
 test_block "sed on custom rules"         'sed -i "d" ~/MCPs/autopilot/config/guardian-custom-rules.txt'
 echo ""
 
+echo "--- Should BLOCK: Dot-source evasion (refined) ---"
+test_block "dot-source /tmp/evil.sh"     '. /tmp/evil.sh'
+test_block "source /tmp/evil.sh"         'source /tmp/evil.sh'
+test_block "chained dot-source"          'ls && . /tmp/evil.sh'
+echo ""
+
+echo "--- Should ALLOW: Dot-space (not dot-source) ---"
+test_allow "find . -name"               'find . -name "*.sh"'
+test_allow "cd . && ls"                 'cd . && ls'
+test_allow "ls ./foo"                   'ls ./foo'
+echo ""
+
 echo "--- Should ALLOW: General Safe Operations ---"
 test_allow "npm install"                 'npm install'
 test_allow "npm run build"               'npm run build'

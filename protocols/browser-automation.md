@@ -9,7 +9,7 @@
 Before opening the browser, ask: **can this task be done without it?**
 
 DO NOT use Playwright for:
-- **Encrypted/authenticated messaging** (WhatsApp, Slack, Telegram) — data is encrypted
+- **Encrypted/authenticated messaging** (WhatsApp, Slack, Telegram) — data is encrypted → use Computer Use for native app versions instead
 - **QR code login flows** — can't scan QR codes programmatically
 - **Tasks where a CLI/API exists** — always prefer CLI over browser
 - **Native desktop apps** — use Computer Use instead (see Layer 0 below)

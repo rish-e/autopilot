@@ -67,58 +67,27 @@ Use `python3 ~/MCPs/autopilot/lib/memory.py` for persistent intelligence across 
 - `python3 ~/MCPs/autopilot/lib/memory.py health` — service health check results
 
 **Procedural Memory — Recording (after every successful multi-step task):**
-After completing a task, record the pattern for future reuse by writing a Python snippet:
-```python
-python3 -c "
-import sys; sys.path.insert(0, '$HOME/MCPs/autopilot/lib')
-from memory import AutopilotMemory
-mem = AutopilotMemory()
-mem.save_procedure('{name}', '{task_description}',
-    [{step_dicts}], services=['{service1}', '{service2}'])
-mem.close()
-"
+After completing a task, record the pattern for future reuse:
+```bash
+python3 ~/MCPs/autopilot/lib/memory.py save-procedure "{name}" "{task_description}" '{steps_json}' --services "{service1},{service2}"
 ```
 
 **Procedural Memory — Retrieval (before starting any task):**
 Before planning a complex task, check if a similar procedure exists:
-```python
-python3 -c "
-import sys, json; sys.path.insert(0, '$HOME/MCPs/autopilot/lib')
-from memory import AutopilotMemory
-mem = AutopilotMemory()
-results = mem.find_procedure(task_desc='{task_description}')
-for r in results:
-    print(f\"{r['name']}: {r['success_count']} successes, rate={r.get('success_rate', 0):.0%}\")
-    print(f\"  Steps: {r['steps_json'][:200]}\")
-mem.close()
-"
+```bash
+python3 ~/MCPs/autopilot/lib/memory.py find-procedure "{task_description}"
 ```
 If a high-confidence match exists (success_rate > 80%, success_count > 2), follow that procedure instead of reasoning from scratch.
 
 **Error Memory — Recording (on every failure):**
-```python
-python3 -c "
-import sys; sys.path.insert(0, '$HOME/MCPs/autopilot/lib')
-from memory import AutopilotMemory
-mem = AutopilotMemory()
-mem.log_error('{error_type}', '{normalized_error_pattern}',
-    service='{service}', resolution='{what_fixed_it}')
-mem.close()
-"
+```bash
+python3 ~/MCPs/autopilot/lib/memory.py log-error "{error_type}" "{normalized_error_pattern}" --service "{service}" --resolution "{what_fixed_it}"
 ```
 
 **Error Memory — Preemptive Check (before executing commands):**
 Before running a command for a service where errors have occurred before:
-```python
-python3 -c "
-import sys; sys.path.insert(0, '$HOME/MCPs/autopilot/lib')
-from memory import AutopilotMemory
-mem = AutopilotMemory()
-match = mem.check_known_error('{error_message}', service='{service}')
-if match: print(f\"Known fix: {match['resolution']}\")
-else: print('No known fix')
-mem.close()
-"
+```bash
+python3 ~/MCPs/autopilot/lib/memory.py check-error "{error_message}" --service "{service}"
 ```
 If a known fix exists, apply it preemptively before the error occurs again.
 

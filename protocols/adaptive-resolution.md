@@ -36,6 +36,8 @@ When a credential is needed for any service, execute this cascade IN ORDER. Do N
    → Already logged in? Skip to step 6 (generate token).
 
 5. BROWSER LOGIN (use credentials to log in)
+   BEFORE attempting browser login: verify primary credentials exist via
+   `~/MCPs/autopilot/bin/preflight.sh`. If missing, run `preflight.sh setup` first.
    a. Check keychain for service-specific email/password
    b. If not found, use primary credentials (keychain: primary/email, primary/password)
    c. If no primary credentials exist → this is the ONE-TIME setup:
@@ -75,14 +77,7 @@ When a command fails during execution:
 
 ```
 1. CHECK ERROR MEMORY
-   python3 -c "
-   import sys; sys.path.insert(0, '$HOME/MCPs/autopilot/lib')
-   from memory import AutopilotMemory
-   mem = AutopilotMemory()
-   match = mem.check_known_error('{error_message}', service='{service}')
-   if match: print(f'Known fix: {match[\"resolution\"]}')
-   mem.close()
-   "
+   python3 ~/MCPs/autopilot/lib/memory.py check-error "{error_message}" --service "{service}"
    → Known fix exists? Apply it. Retry the command.
 
 2. DIAGNOSE THE ERROR
@@ -103,14 +98,7 @@ When a command fails during execution:
 
 4. RECORD THE ERROR AND FIX
    After finding what works, record it so it never happens again:
-   python3 -c "
-   import sys; sys.path.insert(0, '$HOME/MCPs/autopilot/lib')
-   from memory import AutopilotMemory
-   mem = AutopilotMemory()
-   mem.log_error('{error_type}', '{error_pattern}', service='{service}',
-       resolution='{what_fixed_it}', resolution_type='auto')
-   mem.close()
-   "
+   python3 ~/MCPs/autopilot/lib/memory.py log-error "{error_type}" "{error_pattern}" --service "{service}" --resolution "{what_fixed_it}"
 
 5. RETRY with the fix applied
 
@@ -150,14 +138,7 @@ When encountering an unknown service:
    python3 ~/MCPs/autopilot/lib/playbook.py generate {service} get_api_key
 
 7. CACHE IN MEMORY DB
-   python3 -c "
-   import sys; sys.path.insert(0, '$HOME/MCPs/autopilot/lib')
-   from memory import AutopilotMemory
-   mem = AutopilotMemory()
-   mem.cache_service('{service}', cli_tool='{tool}', category='{category}',
-       website='{url}', has_mcp={0_or_1}, has_registry=1, has_playbook=1)
-   mem.close()
-   "
+   python3 ~/MCPs/autopilot/lib/memory.py cache-service "{service}" --cli "{tool}" --category "{category}" --website "{url}" --has-mcp --has-registry --has-playbook
 
 8. CHECK FOR MCP
    If an MCP was found in step 2b:
@@ -175,19 +156,13 @@ This entire sequence happens INLINE in under 60 seconds. The user sees "Research
 
 Before presenting a plan (Flow B) or starting execution (Flow A), silently run ALL of these:
 
+0. **Credential gate**: Run `~/MCPs/autopilot/bin/preflight.sh`. If primary credentials aren't set, run `~/MCPs/autopilot/bin/preflight.sh setup` immediately. This MUST happen before any other check.
+
 1. **Harvest credentials**: Run `~/MCPs/autopilot/bin/harvest.sh 2>/dev/null` to auto-discover any tokens already on the machine. Do this ONCE at the start of every session.
 
 2. **Check procedural memory**: Before planning, search for similar past tasks:
    ```
-   python3 -c "
-   import sys; sys.path.insert(0, '$HOME/MCPs/autopilot/lib')
-   from memory import AutopilotMemory
-   mem = AutopilotMemory()
-   results = mem.find_procedure(task_desc='{task}')
-   for r in results:
-       print(f'{r[\"name\"]}: {r[\"success_count\"]} successes, rate={r.get(\"success_rate\",0):.0%}')
-   mem.close()
-   "
+   python3 ~/MCPs/autopilot/lib/memory.py find-procedure "{task}"
    ```
    If a high-confidence match exists (success_rate > 80%, runs > 2), use that procedure as the plan instead of reasoning from scratch.
 
@@ -197,16 +172,8 @@ Before presenting a plan (Flow B) or starting execution (Flow A), silently run A
 
 5. **Check error memory**: For every service involved, check if there are known error patterns:
    ```
-   python3 -c "
-   import sys; sys.path.insert(0, '$HOME/MCPs/autopilot/lib')
-   from memory import AutopilotMemory
-   mem = AutopilotMemory()
-   for svc in ['{service1}', '{service2}']:
-       errors = mem.db.execute('SELECT pattern, resolution FROM errors WHERE service=? AND resolution IS NOT NULL', (svc,)).fetchall()
-       for e in errors:
-           print(f'  Known issue with {svc}: {e[0]} → fix: {e[1]}')
-   mem.close()
-   "
+   python3 ~/MCPs/autopilot/lib/memory.py check-error "" --service "{service1}"
+   python3 ~/MCPs/autopilot/lib/memory.py check-error "" --service "{service2}"
    ```
    Apply known fixes preemptively in the plan.
 
@@ -218,26 +185,12 @@ After EVERY task completion (success or failure), record what happened:
 
 1. **Record procedure** (on success):
    ```
-   python3 -c "
-   import sys, json; sys.path.insert(0, '$HOME/MCPs/autopilot/lib')
-   from memory import AutopilotMemory
-   mem = AutopilotMemory()
-   mem.save_procedure('{name}', '{task_description}',
-       {steps_as_list}, services={services_list})
-   mem.close()
-   "
+   python3 ~/MCPs/autopilot/lib/memory.py save-procedure "{name}" "{task_description}" '{steps_json}' --services "{service1},{service2}"
    ```
 
 2. **Record errors** (on failure):
    ```
-   python3 -c "
-   import sys; sys.path.insert(0, '$HOME/MCPs/autopilot/lib')
-   from memory import AutopilotMemory
-   mem = AutopilotMemory()
-   mem.log_error('{error_type}', '{pattern}', service='{service}',
-       resolution='{what_fixed_it_if_found}')
-   mem.close()
-   "
+   python3 ~/MCPs/autopilot/lib/memory.py log-error "{error_type}" "{pattern}" --service "{service}" --resolution "{what_fixed_it_if_found}"
    ```
 
 3. **Update service metadata** (always):

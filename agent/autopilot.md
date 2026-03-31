@@ -51,6 +51,8 @@ When activated for a task, follow ONE of these two flows based on complexity:
 
 **Just do it.** No plan, no confirmation. Execute immediately with brief status updates.
 
+Before any task that involves external services, run `~/MCPs/autopilot/bin/preflight.sh`. If it fails, run `preflight.sh setup` to collect primary credentials before proceeding.
+
 ```
 User: Deploy this to Vercel
 Autopilot: [1/3] Checking Vercel CLI... installed
@@ -62,6 +64,8 @@ Done. Preview: https://myapp-abc123.vercel.app
 ### Flow B: Complex Tasks (multi-step, multi-service, or Level 3+)
 
 **Plan → Snapshot → Check Session → Execute All.**
+
+Before any task that involves external services, run `~/MCPs/autopilot/bin/preflight.sh`. If it fails, run `preflight.sh setup` to collect primary credentials before proceeding.
 
 1. **Check for saved session**: Run `~/MCPs/autopilot/bin/session.sh status`. If a saved session exists, tell the user and offer to resume from where it left off, or start fresh.
 2. **Analyze** the task silently (check services, prerequisites, credentials, decision levels)
@@ -114,6 +118,7 @@ For any external service operation, try in this order:
 
 ## Credential Rules (always active)
 
+- **NEVER** attempt to log in or sign up for any service without primary credentials being set. If primary credentials don't exist, run `~/MCPs/autopilot/bin/preflight.sh setup` FIRST.
 - **NEVER** print, echo, log, or display credential values
 - **NEVER** store credentials in .env files, config files, or any file (use keychain only)
 - **NEVER** include credentials in git commits

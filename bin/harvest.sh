@@ -432,20 +432,23 @@ cmd_status() {
     printf "  ${DIM}%-15s %-20s %-15s${NC}\n" "───────" "───" "──────"
 
     for svc in "${services[@]}"; do
-        # Define expected keys per service
+        # Define expected keys and CLI command per service
         local keys=()
+        local cli_cmd=""
         case "$svc" in
-            vercel)     keys=("api-token") ;;
-            github)     keys=("auth-token") ;;
-            supabase)   keys=("access-token") ;;
-            cloudflare) keys=("api-token") ;;
-            npm)        keys=("auth-token") ;;
-            docker)     keys=("config-path") ;;
+            vercel)     keys=("api-token");    cli_cmd="vercel" ;;
+            github)     keys=("auth-token");   cli_cmd="gh" ;;
+            supabase)   keys=("access-token"); cli_cmd="supabase" ;;
+            cloudflare) keys=("api-token");    cli_cmd="wrangler" ;;
+            npm)        keys=("auth-token");   cli_cmd="npm" ;;
+            docker)     keys=("config-path");  cli_cmd="docker" ;;
         esac
 
         for key in "${keys[@]}"; do
             if "$KEYCHAIN" has "$svc" "$key" 2>/dev/null; then
                 printf "  %-15s %-20s ${GREEN}%-15s${NC}\n" "$svc" "$key" "in keychain"
+            elif [[ -n "$cli_cmd" ]] && ! command -v "$cli_cmd" &>/dev/null; then
+                printf "  %-15s %-20s ${DIM}%-15s${NC}\n" "$svc" "$key" "not installed"
             else
                 printf "  %-15s %-20s ${YELLOW}%-15s${NC}\n" "$svc" "$key" "not stored"
             fi

@@ -1,4 +1,16 @@
-You are now operating in **Autopilot mode** for this task only. Execute the user's request autonomously using the full Autopilot system.
+You are now operating in **Autopilot v2.0 mode** for this task only. Execute the user's request autonomously using the full Autopilot system.
+
+## System Reference
+
+The Autopilot v2.0 system lives at `~/MCPs/autopilot/`. Key components:
+- **Guardian** (`bin/guardian.sh`) — safety hook that blocks dangerous commands
+- **Keychain** (`bin/keychain.sh`) — credential storage (macOS Keychain backend)
+- **Harvest** (`bin/harvest.sh`) — credential discovery and import from local CLIs
+- **TOTP** (`bin/totp.sh`) — time-based one-time password generation
+- **Chrome Debug** (`bin/chrome-debug.sh`) — persistent browser for Playwright automation
+- **Protocols** (`protocols/`) — on-demand protocol docs (browser-automation, etc.)
+- **Services** (`services/`) — per-service interaction guides (dynamic, self-expanding)
+- **Custom Rules** (`config/guardian-custom-rules.txt`) — agent-appendable safety rules
 
 ## How to operate
 
@@ -17,6 +29,7 @@ You are now operating in **Autopilot mode** for this task only. Execute the user
 - **Service registries**: read from `~/MCPs/autopilot/services/{service}.md` for how to interact with each service. If none exists, research the docs (WebSearch), create one, and continue
 - **Safety**: the Guardian hook blocks dangerous commands automatically. Don't try to work around it
 - **Log account activity**: mark ACCOUNT CREATED, LOGGED IN, TOKEN STORED in the execution log
+- **Browser automation**: read `protocols/browser-automation.md` before using Playwright. Prefer CLI, then Playwright, then Computer Use
 
 ## Execution Log Format
 

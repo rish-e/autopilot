@@ -371,31 +371,57 @@ fi
 
 # Create directories
 COMMANDS_DIR="$HOME/.claude/commands"
-mkdir -p "$INSTALL_DIR"/{bin,config,services}
+mkdir -p "$INSTALL_DIR"/{bin,config,services,lib,protocols,playbooks}
+mkdir -p "$HOME/.autopilot"
 mkdir -p "$AGENT_DIR"
 mkdir -p "$COMMANDS_DIR"
 
-# Copy core files
-cp -f "$SOURCE_DIR/bin/keychain.sh" "$INSTALL_DIR/bin/"
-cp -f "$SOURCE_DIR/bin/guardian.sh" "$INSTALL_DIR/bin/"
-cp -f "$SOURCE_DIR/bin/setup-clis.sh" "$INSTALL_DIR/bin/"
-cp -f "$SOURCE_DIR/bin/test-guardian.sh" "$INSTALL_DIR/bin/"
-cp -f "$SOURCE_DIR/bin/chrome-debug.sh" "$INSTALL_DIR/bin/"
-cp -f "$SOURCE_DIR/bin/audit.sh" "$INSTALL_DIR/bin/"
-cp -f "$SOURCE_DIR/bin/snapshot.sh" "$INSTALL_DIR/bin/"
-cp -f "$SOURCE_DIR/bin/session.sh" "$INSTALL_DIR/bin/"
+# Install pyotp (needed for TOTP generation in bin/totp.sh)
+info "Installing pyotp..."
+pip3 install --user pyotp 2>/dev/null || pip install --user pyotp 2>/dev/null || warn "Could not install pyotp — TOTP generation may not work"
+ok "pyotp installed"
+
+# Copy all scripts (bin/*.sh)
+cp -f "$SOURCE_DIR/bin/"*.sh "$INSTALL_DIR/bin/"
 ok "Scripts installed"
 
-cp -f "$SOURCE_DIR/config/decision-framework.md" "$INSTALL_DIR/config/"
-cp -f "$SOURCE_DIR/config/trusted-mcps.yaml" "$INSTALL_DIR/config/"
-cp -f "$SOURCE_DIR/config/playwright-config.json" "$INSTALL_DIR/config/"
-ok "Config installed"
+# Copy all library files (lib/*.py)
+cp -f "$SOURCE_DIR/lib/"*.py "$INSTALL_DIR/lib/"
+ok "Python library installed"
 
-# Only create custom rules file if it doesn't exist (preserve user additions)
-if [ ! -f "$INSTALL_DIR/config/guardian-custom-rules.txt" ]; then
-    cp "$SOURCE_DIR/config/guardian-custom-rules.txt" "$INSTALL_DIR/config/"
+# Copy all protocols (protocols/*.md)
+cp -f "$SOURCE_DIR/protocols/"*.md "$INSTALL_DIR/protocols/"
+ok "Protocols installed"
+
+# Copy all config files (except guardian-custom-rules which is handled separately)
+for cfg in "$SOURCE_DIR/config/"*; do
+    basename=$(basename "$cfg")
+    # Skip directories (like channels/) — handle separately
+    [ -d "$cfg" ] && continue
+    # Preserve user's custom guardian rules
+    if [ "$basename" = "guardian-custom-rules.txt" ]; then
+        if [ ! -f "$INSTALL_DIR/config/$basename" ]; then
+            cp "$cfg" "$INSTALL_DIR/config/"
+        fi
+    else
+        cp -f "$cfg" "$INSTALL_DIR/config/"
+    fi
+done
+# Copy config subdirectories (e.g., channels/)
+if [ -d "$SOURCE_DIR/config/channels" ]; then
+    mkdir -p "$INSTALL_DIR/config/channels"
+    cp -rf "$SOURCE_DIR/config/channels/"* "$INSTALL_DIR/config/channels/" 2>/dev/null || true
 fi
+ok "Config installed"
 ok "Guardian custom rules preserved"
+
+# Copy playbooks (recursive — preserves service subdirectories)
+if [ -d "$SOURCE_DIR/playbooks" ]; then
+    cp -rf "$SOURCE_DIR/playbooks/"* "$INSTALL_DIR/playbooks/" 2>/dev/null || true
+    # Ensure .gitkeep exists
+    touch "$INSTALL_DIR/playbooks/.gitkeep"
+fi
+ok "Playbooks installed"
 
 # Copy service registry (don't overwrite user modifications)
 for svc in "$SOURCE_DIR/services/"*.md; do
@@ -634,6 +660,10 @@ echo "    System:    $INSTALL_DIR/"
 echo "    Guardian:  Active (PreToolUse hook in settings.json)"
 echo "    Perms:     Bash auto-approved (guardian provides safety)"
 echo "    Browser:   Playwright optimized for stability (config in $INSTALL_DIR/config/)"
+echo "    Protocols: $INSTALL_DIR/protocols/"
+echo "    Playbooks: $INSTALL_DIR/playbooks/"
+echo "    Library:   $INSTALL_DIR/lib/"
+echo "    State:     ~/.autopilot/ (memory.db, runtime state)"
 echo "    Creds:     $PLATFORM credential store ($(case $PLATFORM in macos) echo "macOS Keychain";; linux|wsl) echo "GNOME Keyring / libsecret";; windows) echo "Windows Credential Manager";; esac))"
 echo ""
 echo "  First run:"

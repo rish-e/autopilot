@@ -758,37 +758,219 @@ def cli_procedures(mem: AutopilotMemory):
               f"avg={avg_ms/1000:.1f}s  v{r['version']}")
 
 
+def cli_log_error(mem: AutopilotMemory, args):
+    mem.log_error(
+        error_type=args.error_type,
+        pattern=args.pattern,
+        service=args.service,
+        resolution=args.resolution,
+    )
+    print(f"{GREEN}Logged error:{NC} [{args.error_type}] {args.pattern[:60]}")
+
+
+def cli_save_procedure(mem: AutopilotMemory, args):
+    try:
+        steps = json.loads(args.steps_json)
+    except json.JSONDecodeError as e:
+        print(f"{RED}Invalid JSON for steps:{NC} {e}", file=sys.stderr)
+        sys.exit(1)
+    services = args.services.split(",") if args.services else None
+    mem.save_procedure(
+        name=args.name,
+        task_pattern=args.description,
+        steps=steps,
+        services=services,
+    )
+    print(f"{GREEN}Saved procedure:{NC} {args.name}")
+
+
+def cli_check_error(mem: AutopilotMemory, args):
+    result = mem.check_known_error(args.error_message, service=args.service)
+    if result:
+        print(f"{GREEN}Known error found:{NC}")
+        print(f"  Type:       {result['error_type']}")
+        print(f"  Pattern:    {result['pattern']}")
+        print(f"  Service:    {result.get('service') or '*'}")
+        print(f"  Seen:       {result['count']}x")
+        print(f"  Resolution: {result['resolution']}")
+    else:
+        print(f"{YELLOW}No known resolution found.{NC}")
+
+
+def cli_cache_service(mem: AutopilotMemory, args):
+    kwargs = {}
+    if args.cli:
+        kwargs["cli_tool"] = args.cli
+    if args.category:
+        kwargs["category"] = args.category
+    if args.website:
+        kwargs["website"] = args.website
+    if args.has_mcp:
+        kwargs["has_mcp"] = 1
+    if args.has_registry:
+        kwargs["has_registry"] = 1
+    if args.has_playbook:
+        kwargs["has_playbook"] = 1
+    mem.cache_service(args.service, **kwargs)
+    print(f"{GREEN}Cached service:{NC} {args.service}")
+
+
+def cli_record_run(mem: AutopilotMemory, args):
+    import uuid
+    run_id = str(uuid.uuid4())[:12]
+    services_list = args.services.split(",") if args.services else []
+
+    # Log a summary trace for this run
+    mem.log_trace(
+        run_id=run_id,
+        step_num=1,
+        action=args.task_name,
+        task_desc=args.task_name,
+        status=args.status,
+        error_msg=args.error,
+        duration_ms=int(args.duration * 1000) if args.duration else None,
+        tokens_in=args.tokens,
+        cost_usd=args.cost,
+        service=services_list[0] if services_list else None,
+    )
+
+    # If cost info provided, also log to costs table
+    if args.cost or args.tokens:
+        mem.log_cost(
+            run_id=run_id,
+            model="autopilot",
+            tokens_in=args.tokens or 0,
+            cost_usd=args.cost or 0,
+            duration_ms=int(args.duration * 1000) if args.duration else 0,
+            task_desc=args.task_name,
+        )
+
+    status_color = GREEN if args.status == "ok" else RED
+    print(f"{status_color}Recorded run:{NC} {run_id}  {args.task_name}  [{args.status}]")
+
+
+def cli_find_procedure(mem: AutopilotMemory, args):
+    results = mem.find_procedure(task_desc=args.task_description)
+    if not results:
+        print(f"{YELLOW}No matching procedures found.{NC}")
+        return
+    print(f"{BOLD}Matching Procedures{NC}")
+    print()
+    for r in results:
+        total = r["success_count"] + r["fail_count"]
+        rate = (r["success_count"] / total * 100) if total > 0 else 0
+        print(f"  {r['name']:35s}  runs={total:3d}  rate={rate:5.1f}%  v{r['version']}")
+        print(f"    {DIM}{r['task_pattern'][:70]}{NC}")
+        if r.get("services"):
+            print(f"    services: {r['services']}")
+
+
+def build_parser():
+    """Build the argparse parser with all subcommands."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="memory.py",
+        description="Autopilot Memory CLI — read and write to the unified memory store",
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    # ── Read subcommands (existing) ──────────────────────────────────────
+    sub.add_parser("stats", help="Show memory database statistics")
+
+    p_runs = sub.add_parser("runs", help="Show recent runs")
+    p_runs.add_argument("limit", nargs="?", type=int, default=10, help="Max runs to show")
+
+    p_costs = sub.add_parser("costs", help="Show cost summary")
+    p_costs.add_argument("days", nargs="?", type=int, default=7, help="Number of days")
+
+    sub.add_parser("errors", help="Show known error patterns")
+    sub.add_parser("health", help="Show service health status")
+    sub.add_parser("services", help="Show cached services")
+    sub.add_parser("procedures", help="Show learned procedures")
+
+    # ── Write subcommands (new) ──────────────────────────────────────────
+
+    p_log_error = sub.add_parser("log-error", help="Log a deduplicated error pattern")
+    p_log_error.add_argument("error_type", help="Error category (e.g. timeout, auth, rate_limit)")
+    p_log_error.add_argument("pattern", help="Error pattern string to match on")
+    p_log_error.add_argument("--service", help="Service that produced the error")
+    p_log_error.add_argument("--resolution", help="Known resolution for this error")
+
+    p_save_proc = sub.add_parser("save-procedure", help="Save a learned procedure")
+    p_save_proc.add_argument("name", help="Unique procedure name")
+    p_save_proc.add_argument("description", help="Task pattern description")
+    p_save_proc.add_argument("steps_json", help="JSON string of procedure steps")
+    p_save_proc.add_argument("--services", help="Comma-separated service names")
+
+    p_check_err = sub.add_parser("check-error", help="Check if an error has a known resolution")
+    p_check_err.add_argument("error_message", help="The error message to look up")
+    p_check_err.add_argument("--service", help="Filter to a specific service")
+
+    p_cache_svc = sub.add_parser("cache-service", help="Cache service metadata")
+    p_cache_svc.add_argument("service", help="Service name")
+    p_cache_svc.add_argument("--cli", help="CLI tool name")
+    p_cache_svc.add_argument("--category", help="Service category")
+    p_cache_svc.add_argument("--website", help="Service website URL")
+    p_cache_svc.add_argument("--has-mcp", action="store_true", help="Service has an MCP server")
+    p_cache_svc.add_argument("--has-registry", action="store_true", help="Service is in the registry")
+    p_cache_svc.add_argument("--has-playbook", action="store_true", help="Service has a playbook")
+
+    p_record_run = sub.add_parser("record-run", help="Record an agent run")
+    p_record_run.add_argument("task_name", help="Name/description of the task")
+    p_record_run.add_argument("status", choices=["ok", "error", "partial"], help="Run outcome")
+    p_record_run.add_argument("--services", help="Comma-separated service names")
+    p_record_run.add_argument("--steps", type=int, help="Number of steps taken")
+    p_record_run.add_argument("--duration", type=float, help="Duration in seconds")
+    p_record_run.add_argument("--tokens", type=int, help="Total tokens used")
+    p_record_run.add_argument("--cost", type=float, help="Total cost in USD")
+    p_record_run.add_argument("--error", help="Error message if status is error")
+
+    p_find_proc = sub.add_parser("find-procedure", help="Find procedures matching a task")
+    p_find_proc.add_argument("task_description", help="Task description to search for")
+
+    return parser
+
+
 def main():
-    if len(sys.argv) < 2:
-        print(f"Usage: python3 memory.py <command>")
-        print(f"Commands: stats, runs, costs, errors, health, services, procedures")
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
         sys.exit(1)
 
     mem = AutopilotMemory()
-    cmd = sys.argv[1]
 
     try:
-        if cmd == "stats":
+        # Read subcommands (existing)
+        if args.command == "stats":
             cli_stats(mem)
-        elif cmd == "runs":
-            limit = int(sys.argv[2]) if len(sys.argv) > 2 else 10
-            cli_runs(mem, limit)
-        elif cmd == "costs":
-            days = int(sys.argv[2]) if len(sys.argv) > 2 else 7
-            cli_costs(mem, days)
-        elif cmd == "errors":
+        elif args.command == "runs":
+            cli_runs(mem, args.limit)
+        elif args.command == "costs":
+            cli_costs(mem, args.days)
+        elif args.command == "errors":
             cli_errors(mem)
-        elif cmd == "health":
+        elif args.command == "health":
             cli_health(mem)
-        elif cmd == "services":
+        elif args.command == "services":
             cli_services(mem)
-        elif cmd == "procedures":
+        elif args.command == "procedures":
             cli_procedures(mem)
-        else:
-            print(f"Error: Unknown command '{cmd}'", file=sys.stderr)
-            print("Commands: stats, runs, costs, errors, health, services, procedures",
-                  file=sys.stderr)
-            sys.exit(1)
+        # Write subcommands (new)
+        elif args.command == "log-error":
+            cli_log_error(mem, args)
+        elif args.command == "save-procedure":
+            cli_save_procedure(mem, args)
+        elif args.command == "check-error":
+            cli_check_error(mem, args)
+        elif args.command == "cache-service":
+            cli_cache_service(mem, args)
+        elif args.command == "record-run":
+            cli_record_run(mem, args)
+        elif args.command == "find-procedure":
+            cli_find_procedure(mem, args)
     finally:
         mem.close()
 

@@ -138,7 +138,7 @@ if echo "$CMD_LOWER" | grep -qE '(^|\s|;|&&|\|)eval\s'; then
 fi
 
 # source / dot-source (can execute arbitrary scripts bypassing guardian)
-if echo "$CMD_LOWER" | grep -qE '(^|\s|;|&&|\|)(source|\.) '; then
+if echo "$CMD_LOWER" | grep -qE '(^|\s|;|&&|\|)\.\s+[a-zA-Z~/]' || echo "$CMD_LOWER" | grep -qE '(^|\s|;|&&|\|)source\s+'; then
     block "EVASION" "source/dot-source can execute arbitrary scripts — bypasses guardian. Run commands directly instead."
 fi
 
