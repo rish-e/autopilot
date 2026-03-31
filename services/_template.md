@@ -1,14 +1,31 @@
-# {Service Name}
+---
+name: "{Service Name}"
+category: "{deployment | database | payments | hosting | cdn | auth | monitoring | messaging | trading}"
+credentials:
+  - key: "api-token"
+    description: "API access token"
+    obtain: "{URL or instructions}"
+    rotation_days: 90
+auth_pattern: "{token-env | token-flag | cli-login | oauth | api-key-header}"
+2fa: "{none | email | authenticator | sms | device-verification}"
+mcp: "{installed | installable | none}"
+cli: "{tool-name | none}"
+rate_limits: "{free tier limits, e.g. 100 deploys/day}"
+related_services: ["{other-service}"]
+decision_levels:
+  read: 1
+  preview: 2
+  production: 3
+  delete: 4
+---
 
-> Category: {deployment | database | payments | hosting | cdn | auth | monitoring | registry}
+# {Service Name}
 
 ## Credentials Required
 
-| Key | Description | How to Obtain |
-|-----|-------------|---------------|
-| `api-token` | API access token | {URL or instructions} |
-| `email` | Account email | User provides |
-| `password` | Account password | User provides (only if browser login needed) |
+| Key | Description | How to Obtain | Rotation |
+|-----|-------------|---------------|----------|
+| `api-token` | API access token | {URL or instructions} | 90 days |
 
 ## CLI Tool
 
@@ -21,13 +38,8 @@
 
 ### {Operation Name}
 ```bash
-# {description}
+# Decision Level: L{n} — {description}
 {exact command with keychain.sh integration}
-```
-
-### {Operation Name}
-```bash
-{exact command}
 ```
 
 ## Browser Fallback
@@ -42,7 +54,6 @@ When CLI is unavailable or insufficient:
    c. Fill password field
    d. Click sign in
 4. If 2FA appears: **ESCALATE to user**
-5. {Continue with specific steps}
 
 ## 2FA Handling
 

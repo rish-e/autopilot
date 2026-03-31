@@ -80,7 +80,7 @@ mcps:
   # ── Built-in capabilities ──────────────────────────────────────
   computer-use:
     type: builtin
-    description: "Native app interaction, vision fallback when Playwright breaks"
+    description: "Native desktop app interaction ONLY (Xcode, Figma, etc.) — never for web-based tasks"
     required: false
     setup_note: "Enable in Claude Code: Settings → Computer Use → Enable"
     verify_tool: "mcp__computer-use__screenshot"

@@ -29,7 +29,7 @@ The Autopilot v2.0 system lives at `~/MCPs/autopilot/`. Key components:
 - **Service registries**: read from `~/MCPs/autopilot/services/{service}.md` for how to interact with each service. If none exists, research the docs (WebSearch), create one, and continue
 - **Safety**: the Guardian hook blocks dangerous commands automatically. Don't try to work around it
 - **Log account activity**: mark ACCOUNT CREATED, LOGGED IN, TOKEN STORED in the execution log
-- **Browser automation**: read `protocols/browser-automation.md` before using Playwright. Prefer CLI, then Playwright, then Computer Use
+- **Browser automation**: read `protocols/browser-automation.md` before using Playwright. Prefer CLI, then Playwright for all web-based tasks. Computer Use is ONLY for native desktop apps with no browser version
 
 ## Execution Log Format
 

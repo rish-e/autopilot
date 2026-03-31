@@ -114,40 +114,52 @@ When encountering an unknown service:
    - File exists? ~/MCPs/autopilot/services/{service}.md → use it
    - In memory DB? python3 lib/memory.py services → check for cached metadata
 
-2. RESEARCH (automatic, inline, no asking)
-   a. WebSearch: "{service} CLI documentation", "{service} API authentication"
-   b. WebSearch: "{service} MCP server npm"
-   c. WebFetch official docs
-   d. Identify: auth method, CLI tool, dangerous operations, dashboard URLs, MCP availability
+2. MCP DISCOVERY (check BEFORE manual research — may skip steps 3-4)
+   a. Check `.well-known/mcp.json`:
+      WebFetch https://{service-domain}/.well-known/mcp.json
+      → If found: extract transport, tools, auth requirements
+   b. Check MCP Registry: WebSearch "site:registry.modelcontextprotocol.io {service}"
+   c. Check Docker MCP Catalog: WebSearch "site:hub.docker.com/mcp {service}"
+   d. Check trusted-mcps.yaml whitelist
+   → If MCP found: evaluate trust, install if whitelisted, present if not
 
-3. CREATE SERVICE REGISTRY
+3. OPENAPI AUTO-DETECTION (check before manual docs research)
+   Try in order (WebFetch, accept 404s silently):
+     https://{service-domain}/openapi.json
+     https://{service-domain}/swagger.json
+     https://{service-domain}/api-docs
+     https://api.{service-domain}/openapi.json
+   → If found: parse spec for endpoints, auth methods, destructive operations
+
+4. RESEARCH (automatic, inline, no asking)
+   a. WebSearch: "{service} CLI documentation", "{service} API authentication"
+   b. WebFetch official docs
+   c. Identify: auth method, CLI tool, dangerous operations, dashboard URLs
+
+5. CREATE SERVICE REGISTRY
    a. Read template: ~/MCPs/autopilot/services/_template.md
-   b. Fill in all fields from research
+   b. Fill in all fields from research + OpenAPI spec + MCP info
    c. Save to ~/MCPs/autopilot/services/{service}.md
 
-4. INSTALL CLI (if one exists)
-   which {tool} || brew install {tool} || npm install -g {tool}
+6. INSTALL CLI (mise-first cascade)
+   which {tool} || mise use -g {tool}@latest || brew install {tool} || npm install -g {tool}
 
-5. ADD GUARDIAN RULES
-   For each dangerous operation identified in research:
+7. AUTO-GENERATE GUARDIAN RULES
+   From OpenAPI spec and docs, identify destructive operations:
+   - DELETE endpoints → DESTRUCTIVE category
+   - Billing/payment endpoints → FINANCIAL category
+   - Production/live operations → DANGEROUS category
    echo 'CATEGORY:::pattern:::reason' >> ~/MCPs/autopilot/config/guardian-custom-rules.txt
 
-6. GENERATE PLAYBOOK SKELETONS
+8. GENERATE PLAYBOOK SKELETONS
    python3 ~/MCPs/autopilot/lib/playbook.py generate {service} signup
    python3 ~/MCPs/autopilot/lib/playbook.py generate {service} login
    python3 ~/MCPs/autopilot/lib/playbook.py generate {service} get_api_key
 
-7. CACHE IN MEMORY DB
+9. CACHE IN MEMORY DB
    python3 ~/MCPs/autopilot/lib/memory.py cache-service "{service}" --cli "{tool}" --category "{category}" --website "{url}" --has-mcp --has-registry --has-playbook
 
-8. CHECK FOR MCP
-   If an MCP was found in step 2b:
-   - Evaluate trust (official org? stars? downloads?)
-   - Score > 70 → install silently: claude mcp add {name} -- npx -y {package}
-   - Score 40-70 → present to user for approval
-   - Add to trusted-mcps.yaml accordingly
-
-9. CONTINUE with the original task using the newly created registry
+10. CONTINUE with the original task using the newly created registry
 ```
 
 This entire sequence happens INLINE in under 60 seconds. The user sees "Researching {service}..." and then the task continues.

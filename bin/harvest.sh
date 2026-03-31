@@ -20,6 +20,7 @@
 #   harvest.sh <service>    Scan a specific service
 #   harvest.sh status       Show what's in keychain vs what's discoverable
 #   harvest.sh scan         Scan but don't import (dry run)
+#   harvest.sh age          Show credential ages (TTL tracking)
 #
 # The scan list is NOT static — it checks memory.db for any services
 # the agent has encountered and adds their known token locations.
@@ -47,6 +48,24 @@ IMPORTED=0
 SKIPPED=0
 NOT_FOUND=0
 
+# ─── Input Sanitization ────────────────────────────────────────────────────
+
+# Validate service names to prevent shell injection (V10 fix)
+# Only allow alphanumeric, hyphens, underscores, and dots
+sanitize_service_name() {
+    local name="$1"
+    if [[ ! "$name" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+        echo "Error: Invalid service name '$name' — only alphanumeric, hyphens, underscores, dots allowed" >&2
+        return 1
+    fi
+    # Also block names that could be path traversal
+    if [[ "$name" == *".."* ]] || [[ "$name" == "/"* ]] || [[ "$name" == "~"* ]]; then
+        echo "Error: Invalid service name '$name' — path traversal not allowed" >&2
+        return 1
+    fi
+    echo "$name"
+}
+
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 usage() {
@@ -59,12 +78,14 @@ Commands:
   status         Show what's in keychain vs what's discoverable
   scan           Dry run — show what would be imported
   list           List all scannable services
+  age            Show credential ages and TTL warnings
 
 Examples:
   harvest.sh              # scan everything, import what's found
   harvest.sh vercel       # scan vercel only
   harvest.sh scan         # dry run
   harvest.sh status       # show inventory
+  harvest.sh age          # show credential ages
 EOF
 }
 
@@ -214,13 +235,13 @@ scan_docker() {
     if [[ -f "$config" ]]; then
         local has_auths
         has_auths=$(python3 -c "
-import json
-data = json.load(open('$config'))
+import json, sys
+data = json.load(open(sys.argv[1]))
 auths = data.get('auths', {})
 if auths:
     for registry in auths:
         print(registry)
-" 2>/dev/null)
+" "$config" 2>/dev/null)
 
         if [[ -n "$has_auths" ]]; then
             # Docker config exists with auths — store the whole config reference
@@ -240,9 +261,10 @@ scan_cloudflare() {
     if [[ -d "$config_dir" ]]; then
         local token
         token=$(python3 -c "
-import json, os
+import json, os, sys
+config_dir = sys.argv[1]
 for f in ['config/default.toml', 'config.toml', 'auth.json']:
-    path = os.path.join('$config_dir', f)
+    path = os.path.join(config_dir, f)
     if os.path.exists(path):
         content = open(path).read()
         # Look for api_token or oauth_token
@@ -252,7 +274,7 @@ for f in ['config/default.toml', 'config.toml', 'auth.json']:
                 if val:
                     print(val)
                     break
-" 2>/dev/null)
+" "$config_dir" 2>/dev/null)
 
         if [[ -n "${token:-}" ]]; then
             import_token "cloudflare" "api-token" "$token" "$config_dir"
@@ -282,17 +304,90 @@ scan_netrc() {
         python3 -c "
 import netrc, sys
 try:
-    n = netrc.netrc('$netrc')
+    n = netrc.netrc(sys.argv[1])
     for host in n.hosts:
         login, _, _ = n.authenticators(host)
         print(f'  Found: {host} (login: {login})')
 except Exception as e:
     print(f'  Could not parse: {e}', file=sys.stderr)
-" 2>/dev/null
+" "$netrc" 2>/dev/null
         return 0
     fi
 
     not_found "netrc" "file"
+}
+
+scan_aws() {
+    local cred_file="$HOME/.aws/credentials"
+    if [[ -f "$cred_file" ]]; then
+        local has_default
+        has_default=$(grep -c '^\[default\]' "$cred_file" 2>/dev/null)
+        if [[ "$has_default" -gt 0 ]]; then
+            import_token "aws" "credentials-path" "$cred_file" "~/.aws/credentials"
+            return 0
+        fi
+    fi
+    # Check: aws sts get-caller-identity (if CLI installed)
+    if command -v aws &>/dev/null; then
+        if aws sts get-caller-identity &>/dev/null 2>&1; then
+            echo -e "  ${YELLOW}NOTE${NC}  aws — CLI is authenticated (credentials in env or config)"
+            return 0
+        fi
+    fi
+    not_found "aws" "credentials"
+}
+
+scan_kubernetes() {
+    local kubeconfig="$HOME/.kube/config"
+    if [[ -f "$kubeconfig" ]]; then
+        import_token "kubernetes" "config-path" "$kubeconfig" "~/.kube/config"
+        return 0
+    fi
+    not_found "kubernetes" "config"
+}
+
+scan_terraform() {
+    local tf_rc="$HOME/.terraformrc"
+    local tf_creds="$HOME/.terraform.d/credentials.tfrc.json"
+    if [[ -f "$tf_creds" ]]; then
+        import_token "terraform" "credentials-path" "$tf_creds" "~/.terraform.d/credentials.tfrc.json"
+        return 0
+    elif [[ -f "$tf_rc" ]]; then
+        import_token "terraform" "config-path" "$tf_rc" "~/.terraformrc"
+        return 0
+    fi
+    not_found "terraform" "credentials"
+}
+
+scan_gcloud() {
+    local gcloud_dir="$HOME/.config/gcloud"
+    if [[ -d "$gcloud_dir" ]]; then
+        if [[ -f "$gcloud_dir/application_default_credentials.json" ]]; then
+            import_token "gcloud" "adc-path" "$gcloud_dir/application_default_credentials.json" "~/.config/gcloud/application_default_credentials.json"
+            return 0
+        fi
+    fi
+    # Check: gcloud auth list
+    if command -v gcloud &>/dev/null; then
+        if gcloud auth list --filter="status:ACTIVE" --format="value(account)" 2>/dev/null | head -1 | grep -q '@'; then
+            echo -e "  ${YELLOW}NOTE${NC}  gcloud — CLI is authenticated"
+            return 0
+        fi
+    fi
+    not_found "gcloud" "credentials"
+}
+
+scan_ssh() {
+    local ssh_dir="$HOME/.ssh"
+    if [[ -d "$ssh_dir" ]]; then
+        local key_count
+        key_count=$(find "$ssh_dir" -maxdepth 1 -name "id_*" -not -name "*.pub" 2>/dev/null | wc -l | tr -d ' ')
+        if [[ "$key_count" -gt 0 ]]; then
+            echo -e "  ${GREEN}FOUND${NC}  ssh — $key_count key(s) in ~/.ssh/"
+            return 0
+        fi
+    fi
+    not_found "ssh" "keys"
 }
 
 # ─── Dynamic Scanner ─────────────────────────────────────────────────────────
@@ -300,7 +395,11 @@ except Exception as e:
 # try common patterns.
 
 scan_dynamic() {
-    local service="$1"
+    local raw_service="$1"
+
+    # Sanitize input to prevent injection
+    local service
+    service=$(sanitize_service_name "$raw_service") || return 1
 
     # Already have a static scanner? Use it
     if declare -f "scan_${service}" &>/dev/null; then
@@ -368,6 +467,21 @@ cmd_harvest_all() {
     echo -e "${BOLD}Cloudflare${NC}"
     scan_cloudflare
 
+    echo -e "${BOLD}AWS${NC}"
+    scan_aws
+
+    echo -e "${BOLD}Kubernetes${NC}"
+    scan_kubernetes
+
+    echo -e "${BOLD}Terraform${NC}"
+    scan_terraform
+
+    echo -e "${BOLD}GCloud${NC}"
+    scan_gcloud
+
+    echo -e "${BOLD}SSH${NC}"
+    scan_ssh
+
     echo -e "${BOLD}.netrc${NC}"
     scan_netrc
 
@@ -379,7 +493,7 @@ import sqlite3, os
 db = os.path.expanduser('~/.autopilot/memory.db')
 if os.path.exists(db):
     conn = sqlite3.connect(db)
-    rows = conn.execute('SELECT name FROM services WHERE name NOT IN (\"vercel\",\"github\",\"supabase\",\"npm\",\"docker\",\"cloudflare\")').fetchall()
+    rows = conn.execute('SELECT name FROM services WHERE name NOT IN (\"vercel\",\"github\",\"supabase\",\"npm\",\"docker\",\"cloudflare\",\"aws\",\"kubernetes\",\"terraform\",\"gcloud\",\"ssh\")').fetchall()
     for r in rows:
         print(r[0])
     conn.close()
@@ -403,7 +517,12 @@ if os.path.exists(db):
 }
 
 cmd_harvest_single() {
-    local service="$1"
+    local raw_service="$1"
+
+    # Sanitize input
+    local service
+    service=$(sanitize_service_name "$raw_service") || exit 1
+
     echo -e "${BOLD}Scanning: $service${NC}"
 
     if declare -f "scan_${service}" &>/dev/null; then
@@ -426,7 +545,7 @@ cmd_status() {
     echo -e "${BOLD}Credential Inventory${NC}"
     echo ""
 
-    local services=("vercel" "github" "supabase" "cloudflare" "npm" "docker")
+    local services=("vercel" "github" "supabase" "cloudflare" "npm" "docker" "aws" "kubernetes" "terraform" "gcloud")
 
     printf "  ${BOLD}%-15s %-20s %-15s${NC}\n" "Service" "Key" "Status"
     printf "  ${DIM}%-15s %-20s %-15s${NC}\n" "───────" "───" "──────"
@@ -436,12 +555,16 @@ cmd_status() {
         local keys=()
         local cli_cmd=""
         case "$svc" in
-            vercel)     keys=("api-token");    cli_cmd="vercel" ;;
-            github)     keys=("auth-token");   cli_cmd="gh" ;;
-            supabase)   keys=("access-token"); cli_cmd="supabase" ;;
-            cloudflare) keys=("api-token");    cli_cmd="wrangler" ;;
-            npm)        keys=("auth-token");   cli_cmd="npm" ;;
-            docker)     keys=("config-path");  cli_cmd="docker" ;;
+            vercel)     keys=("api-token");          cli_cmd="vercel" ;;
+            github)     keys=("auth-token");         cli_cmd="gh" ;;
+            supabase)   keys=("access-token");       cli_cmd="supabase" ;;
+            cloudflare) keys=("api-token");          cli_cmd="wrangler" ;;
+            npm)        keys=("auth-token");         cli_cmd="npm" ;;
+            docker)     keys=("config-path");        cli_cmd="docker" ;;
+            aws)        keys=("credentials-path");   cli_cmd="aws" ;;
+            kubernetes) keys=("config-path");        cli_cmd="kubectl" ;;
+            terraform)  keys=("credentials-path");   cli_cmd="terraform" ;;
+            gcloud)     keys=("adc-path");           cli_cmd="gcloud" ;;
         esac
 
         for key in "${keys[@]}"; do
@@ -482,6 +605,12 @@ cmd_status() {
     else
         printf "  %-15s %-20s ${YELLOW}%-15s${NC}\n" "primary" "password" "not set"
     fi
+}
+
+cmd_age() {
+    echo -e "${BOLD}Credential Age Report${NC}"
+    echo ""
+    "$KEYCHAIN" check-ttl "${1:-90}"
 }
 
 cmd_list() {
@@ -525,6 +654,10 @@ case "${1:-}" in
         ;;
     list)
         cmd_list
+        ;;
+    age)
+        shift
+        cmd_age "${1:-90}"
         ;;
     -h|--help|help)
         usage

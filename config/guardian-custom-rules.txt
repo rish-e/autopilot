@@ -24,3 +24,4 @@ CREDENTIAL:::totp\.sh.*generate.*\|.*(curl|wget|nc):::Piping TOTP code to networ
 CREDENTIAL:::memory\.db.*(scp|curl):::Exfiltrating memory database
 DESTRUCTIVE:::rm.*memory\.db:::Deleting Autopilot memory database
 DESTRUCTIVE:::rm.*-rf.*playbooks:::Deleting cached playbooks directory
+EVASION:::browser_evaluate.*document\.cookie|browser_run_code.*document\.cookie:::Extracting cookies via MCP browser evaluation

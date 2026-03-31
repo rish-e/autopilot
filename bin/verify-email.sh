@@ -135,22 +135,80 @@ cmd_parse() {
         exit 1
     fi
 
+    # Strip HTML tags if body appears to be HTML (MailSlurp-style robust parsing)
+    local clean_body="$body"
+    if echo "$body" | grep -qE '<html|<body|<div|<table|<a href'; then
+        # HTML detected — strip tags, decode entities, extract text
+        clean_body=$(echo "$body" | python3 -c "
+import sys, html, re
+raw = sys.stdin.read()
+# Remove style/script blocks
+raw = re.sub(r'<(style|script)[^>]*>.*?</\1>', '', raw, flags=re.DOTALL|re.IGNORECASE)
+# Replace <br>, <p>, <div>, <tr> with newlines
+raw = re.sub(r'<(br|p|div|tr|li)[^>]*/?>','\n', raw, flags=re.IGNORECASE)
+# Strip remaining tags
+raw = re.sub(r'<[^>]+>', ' ', raw)
+# Decode HTML entities
+raw = html.unescape(raw)
+# Collapse whitespace
+raw = re.sub(r'[ \t]+', ' ', raw)
+raw = re.sub(r'\n{3,}', '\n\n', raw)
+print(raw.strip())
+" 2>/dev/null || echo "$body")
+    fi
+
     case "$type" in
         code)
-            # Extract verification code (4-8 digits by default)
-            local pattern
+            # Multi-strategy code extraction with confidence scoring
+            local pattern candidates=() best_match=""
+
             if [[ -n "$code_length" ]]; then
-                pattern="\\b[0-9]{${code_length}}\\b"
+                pattern="[0-9]{${code_length}}"
             else
-                pattern="\\b[0-9]{4,8}\\b"
+                pattern="[0-9]{4,8}"
             fi
 
-            # Try to find code near verification-related context words
-            local result
-            result=$(echo "$body" | grep -oE "$pattern" | head -1)
+            # Strategy 1: Code near context words (highest confidence)
+            # Look for codes on lines containing verification-related words
+            local context_match=""
+            context_match=$(echo "$clean_body" | grep -iE "code|verification|verify|confirm|otp|pin|one.time|passcode|two.factor|2fa" 2>/dev/null | grep -oE "\\b${pattern}\\b" 2>/dev/null | head -1) || true
+            if [[ -n "$context_match" ]]; then
+                candidates+=("context:$context_match")
+            fi
 
-            if [[ -n "$result" ]]; then
-                echo "$result"
+            # Strategy 2: Code after a colon or "is" (e.g., "Your code is: 123456")
+            local colon_match=""
+            colon_match=$(echo "$clean_body" | grep -oE "(is|code|Code|PIN|OTP)[: ]+[0-9]{4,8}" 2>/dev/null | grep -oE "[0-9]{4,8}" 2>/dev/null | head -1) || true
+            if [[ -n "$colon_match" ]]; then
+                candidates+=("colon:$colon_match")
+            fi
+
+            # Strategy 3: Standalone code (6-digit preferred, common for 2FA)
+            local standalone_match=""
+            standalone_match=$(echo "$clean_body" | grep -oE "\\b[0-9]{6}\\b" 2>/dev/null | head -1) || true
+            if [[ -n "$standalone_match" ]]; then
+                candidates+=("standalone6:$standalone_match")
+            fi
+
+            # Strategy 4: Any matching code (lowest confidence)
+            local any_match=""
+            any_match=$(echo "$clean_body" | grep -oE "\\b${pattern}\\b" 2>/dev/null | head -1) || true
+            if [[ -n "$any_match" ]]; then
+                candidates+=("any:$any_match")
+            fi
+
+            # Pick best match by confidence order
+            if [[ ${#candidates[@]} -gt 0 ]]; then
+                # Priority: context > colon > standalone6 > any
+                for strategy in context colon standalone6 any; do
+                    for c in "${candidates[@]}"; do
+                        if [[ "$c" == "$strategy:"* ]]; then
+                            best_match="${c#*:}"
+                            break 2
+                        fi
+                    done
+                done
+                echo "$best_match"
             else
                 echo "Error: No verification code found in email body" >&2
                 exit 1
@@ -158,25 +216,32 @@ cmd_parse() {
             ;;
 
         link)
-            # Extract verification URL matching the pattern
-            local result
-            result=$(echo "$body" | grep -oE "https?://[^[:space:]\"'<>]+($url_pattern)[^[:space:]\"'<>]*" | head -1)
+            # Multi-strategy link extraction
+            local result=""
+
+            # Strategy 1: href extraction from HTML (highest confidence for HTML emails)
+            if echo "$body" | grep -qE '<a[^>]+href=' 2>/dev/null; then
+                result=$(echo "$body" | grep -oE 'href="https?://[^"]+' 2>/dev/null | sed 's/^href="//' | grep -iE "$url_pattern" 2>/dev/null | head -1) || true
+            fi
+
+            # Strategy 2: URL in text matching pattern
+            if [[ -z "$result" ]]; then
+                result=$(echo "$clean_body" | grep -oE "https?://[^[:space:]\"'<>]+($url_pattern)[^[:space:]\"'<>]*" 2>/dev/null | head -1) || true
+            fi
+
+            # Strategy 3: Any URL matching pattern (case-insensitive)
+            if [[ -z "$result" ]]; then
+                result=$(echo "$clean_body" | grep -oE "https?://[^[:space:]\"'<>]+" 2>/dev/null | grep -iE "$url_pattern" 2>/dev/null | head -1) || true
+            fi
 
             if [[ -n "$result" ]]; then
-                # Clean trailing punctuation that might have been captured
-                result=$(echo "$result" | sed 's/[.)>,;]*$//')
+                # Clean trailing punctuation and HTML artifacts
+                result=$(echo "$result" | sed 's/[.)>,;]*$//' | sed 's/&amp;/\&/g')
                 echo "$result"
             else
-                # Fallback: try to find any URL that looks like a verification link
-                result=$(echo "$body" | grep -oE "https?://[^[:space:]\"'<>]+" | grep -iE "$url_pattern" | head -1)
-                if [[ -n "$result" ]]; then
-                    result=$(echo "$result" | sed 's/[.)>,;]*$//')
-                    echo "$result"
-                else
-                    echo "Error: No verification link found in email body" >&2
-                    echo "Searched for pattern: $url_pattern" >&2
-                    exit 1
-                fi
+                echo "Error: No verification link found in email body" >&2
+                echo "Searched for pattern: $url_pattern" >&2
+                exit 1
             fi
             ;;
 

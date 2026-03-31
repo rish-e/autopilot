@@ -75,6 +75,47 @@ python3 ~/MCPs/autopilot/lib/memory.py record-run "{task_name}" "success" \
 - Sonnet input: $3 / output: $15
 - Haiku input: $0.25 / output: $1.25
 
+### CascadeFlow Routing (SOTA)
+
+Instead of assigning models at plan time, use **adaptive escalation**: start cheap, escalate on failure.
+
+```
+For each delegated subtask:
+  1. Try on HAIKU first (if task type supports it)
+     → Success? Done. Cost: ~4% of Opus.
+     → Failed or low-quality output? ↓
+
+  2. Retry on SONNET
+     → Success? Done. Cost: ~20% of Opus.
+     → Failed? ↓
+
+  3. Execute on OPUS (guaranteed quality)
+     → Always succeeds or reports genuine blocker.
+```
+
+**When to use CascadeFlow vs Static Routing:**
+- **CascadeFlow**: Best for tasks where you're unsure of required complexity (research that might be simple or complex, code generation that might need iteration).
+- **Static routing**: Best when you KNOW the complexity upfront (deployment commands → always Sonnet, doc lookup → always Haiku).
+
+**CascadeFlow rules:**
+- Never cascade security decisions — always Opus.
+- Never cascade browser automation — always Sonnet minimum (Haiku can't handle multi-step browser flows).
+- Track cascade patterns: if Haiku fails 3+ times on a task TYPE, auto-promote that type to Sonnet-minimum in future.
+- Log escalations to memory.py for cost optimization analysis.
+
+### Token Budget Estimation
+
+Before executing a complex task, estimate the cost:
+
+```bash
+python3 ~/MCPs/autopilot/lib/memory.py estimate-cost "{task_description}" --services "{service1},{service2}"
+```
+
+If the estimate returns high confidence and the cost exceeds $0.50, mention it to the user in the plan:
+"Estimated cost: ~$X.XX based on N similar tasks."
+
+After every task, track actual vs estimated for calibration.
+
 ### When NOT to Route
 
 Don't bother routing for:

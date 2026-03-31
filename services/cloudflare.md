@@ -1,6 +1,29 @@
-# Cloudflare
+---
+name: "Cloudflare"
+category: "cdn, hosting, storage"
+credentials:
+  - key: "api-token"
+    description: "Cloudflare API token"
+    obtain: "https://dash.cloudflare.com/profile/api-tokens"
+    rotation_days: 90
+  - key: "account-id"
+    description: "Cloudflare Account ID"
+    obtain: "Dashboard → any domain → Overview → right sidebar"
+    rotation_days: null
+auth_pattern: "token-env"
+2fa: "authenticator"
+mcp: "installable"
+cli: "wrangler"
+rate_limits: "100k Worker requests/day, 10GB R2 storage free"
+related_services: ["vercel", "github"]
+decision_levels:
+  read: 1
+  deploy-worker: 2
+  dns-change: 3
+  delete-zone: 4
+---
 
-> Category: cdn, hosting, storage
+# Cloudflare
 
 ## Credentials Required
 

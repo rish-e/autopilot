@@ -40,3 +40,16 @@ __pycache__/
 
 # Memory database (user-level, at ~/.autopilot/memory.db)
 # Not in this repo — stored in user home directory
+
+# Staging directories (intermediate build artifacts)
+.tier4-staging/
+.tier5-staging/
+
+# Autopilot session logs (project-level)
+.autopilot/
+
+# Preflight cache (machine-specific)
+config/preflight.cache
+
+# Credential TTL metadata (machine-specific)
+config/credential-ttl/

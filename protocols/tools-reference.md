@@ -15,13 +15,21 @@ Use `~/MCPs/autopilot/bin/totp.sh` for all 2FA operations.
 4. Store it: `echo "THE_SEED" | ~/MCPs/autopilot/bin/totp.sh store {service}`
 5. Generate the initial code: `CODE=$(~/MCPs/autopilot/bin/totp.sh generate {service})`
 6. Enter the code in the verification field via `browser_type`
-7. Save backup codes if provided: `echo "codes..." | ~/MCPs/autopilot/bin/keychain.sh set {service} backup-codes`
+7. Save backup codes if provided (one per line via stdin):
+   `echo -e "code1\ncode2\ncode3..." | ~/MCPs/autopilot/bin/totp.sh backup-store {service}`
+8. Verify backup codes were stored: `~/MCPs/autopilot/bin/totp.sh backup-count {service}`
 
 **When logging into a service that requires 2FA:**
 1. After entering email/password, detect the 2FA prompt via `browser_snapshot`
 2. Check if TOTP seed exists: `~/MCPs/autopilot/bin/totp.sh has {service}`
 3. If yes: `CODE=$(~/MCPs/autopilot/bin/totp.sh generate {service})` → enter in form
-4. If no: **ESCALATE** to user (Level 5) — "Enter the 6-digit code from your authenticator app"
+4. If TOTP fails (wrong code): try a backup code: `CODE=$(~/MCPs/autopilot/bin/totp.sh backup-use {service})`
+5. If no seed AND no backup codes: **ESCALATE** to user (Level 5) — "Enter the 6-digit code from your authenticator app"
+
+**Backup code monitoring:**
+- Check status across all services: `~/MCPs/autopilot/bin/totp.sh backup-status`
+- Alerts automatically when < 3 codes remaining
+- Critical alert when all codes exhausted — prompt user to regenerate
 
 ### Email Verification Flow
 
@@ -61,10 +69,12 @@ Use `python3 ~/MCPs/autopilot/lib/memory.py` for persistent intelligence across 
 - `python3 ~/MCPs/autopilot/lib/memory.py stats` — overview of all tables
 - `python3 ~/MCPs/autopilot/lib/memory.py runs` — recent task executions
 - `python3 ~/MCPs/autopilot/lib/memory.py procedures` — learned reusable patterns
-- `python3 ~/MCPs/autopilot/lib/memory.py errors` — known error patterns and fixes
+- `python3 ~/MCPs/autopilot/lib/memory.py skills` — mature procedures (3+ successes, >80% rate) usable as building blocks
+- `python3 ~/MCPs/autopilot/lib/memory.py errors` — known error patterns and fixes (auto-fingerprinted)
 - `python3 ~/MCPs/autopilot/lib/memory.py services` — cached service metadata
 - `python3 ~/MCPs/autopilot/lib/memory.py costs` — token usage and cost breakdown
 - `python3 ~/MCPs/autopilot/lib/memory.py health` — service health check results
+- `python3 ~/MCPs/autopilot/lib/memory.py estimate-cost "{task}" --services "{svc}"` — predict cost before executing
 
 **Procedural Memory — Recording (after every successful multi-step task):**
 After completing a task, record the pattern for future reuse:
@@ -91,6 +101,40 @@ python3 ~/MCPs/autopilot/lib/memory.py check-error "{error_message}" --service "
 ```
 If a known fix exists, apply it preemptively before the error occurs again.
 
+### Structured Audit Log
+
+Use `~/MCPs/autopilot/bin/audit.sh` for tamper-evident logging with SHA-256 hash chain.
+
+**Log an action (do this for EVERY action during a task):**
+```bash
+~/MCPs/autopilot/bin/audit.sh log "{action}" --level {1-5} --service {service} --result {result} --session "{session_name}"
+```
+
+**View entries:**
+- `~/MCPs/autopilot/bin/audit.sh show [N]` — last N entries (default 20)
+- `~/MCPs/autopilot/bin/audit.sh search {term}` — search all entries
+- `~/MCPs/autopilot/bin/audit.sh accounts` — credential/account activity
+- `~/MCPs/autopilot/bin/audit.sh failures` — failed actions only
+- `~/MCPs/autopilot/bin/audit.sh summary` — one-line-per-session overview
+
+**Integrity:**
+- `~/MCPs/autopilot/bin/audit.sh verify` — verify hash chain (tamper detection)
+
+**Export:**
+- `~/MCPs/autopilot/bin/audit.sh export markdown` — Markdown table format
+- `~/MCPs/autopilot/bin/audit.sh export csv` — CSV format
+
+The audit log is stored at `{project}/.autopilot/audit.jsonl` (JSONL format). Each entry contains a `prev_hash` field linking to the SHA-256 of the previous entry, forming a tamper-evident chain.
+
+### Credential TTL
+
+**Check credential age:**
+- `~/MCPs/autopilot/bin/keychain.sh age {service} {key}` — show days since stored
+- `~/MCPs/autopilot/bin/keychain.sh check-ttl [max-days]` — show stale credentials (default: 90 days)
+- `~/MCPs/autopilot/bin/harvest.sh age [max-days]` — shortcut for TTL report
+
+TTL metadata is stored in `~/MCPs/autopilot/config/credential-ttl/` as simple date files. Updated automatically on every `keychain.sh set`.
+
 ### Dynamic Playbook Engine
 
 Use `python3 ~/MCPs/autopilot/lib/playbook.py` for browser automation playbooks.
@@ -115,4 +159,75 @@ After generating, use `browser_navigate` + `browser_snapshot` to fill in actual 
 2. If exists: load it with `get`, execute steps sequentially with `browser_snapshot` verification after each
 3. If not: `generate` a skeleton, navigate to the page, fill in selectors from snapshot, execute, then the playbook auto-saves to cache
 4. After successful execution: the playbook is cached and reused next time — no research needed
-5. If a step fails: check error memory for known fix, try Computer Use vision fallback, update the playbook if selectors changed
+5. If a step fails: check error memory for known fix, retry with alternative selectors from browser_snapshot, update the playbook if selectors changed
+
+**Playbook step format** — each step has an `intent` field describing what the step is trying to achieve:
+```yaml
+- id: fill_email
+  intent: "Enter account email address"
+  action: browser_type
+  params: {field: email, text: "{{email}}"}
+```
+The `intent` enables the agent to find alternative approaches when the specific action fails.
+
+**Wait/timing healing:**
+`python3 ~/MCPs/autopilot/lib/playbook.py heal-timing {service} {flow} {step_id} {actual_ms} {success}`
+Tracks actual wait durations and auto-adjusts timeouts to p90 * 1.5x of successful waits.
+
+### Procedure Learning v2
+
+`python3 ~/MCPs/autopilot/lib/memory.py` — enhanced procedure commands:
+
+**Save with summary (two-tier discovery):**
+```bash
+python3 ~/MCPs/autopilot/lib/memory.py save-procedure "deploy_vercel" \
+  "Deploy Next.js app to Vercel" '[...]' \
+  --services vercel --summary "Deploy to Vercel with env vars"
+```
+
+**View deprecated procedures:**
+`python3 ~/MCPs/autopilot/lib/memory.py deprecated`
+
+**Manually deprecate:**
+`python3 ~/MCPs/autopilot/lib/memory.py deprecate "old_proc" --reason "replaced by new_proc"`
+
+**Detect meta-procedures (shared step patterns):**
+`python3 ~/MCPs/autopilot/lib/memory.py meta-procedures --min-shared 3`
+
+**Auto-deprecation:** Procedures are automatically deprecated after 3 consecutive failures.
+Re-saving a procedure clears deprecation and resets the failure counter.
+
+### Service Registry
+
+Service registries live at `~/MCPs/autopilot/services/`. Each file has YAML frontmatter with structured metadata:
+```yaml
+---
+name: "Vercel"
+category: "deployment"
+auth_pattern: "token-flag"
+2fa: "email"
+mcp: "installable"
+cli: "vercel"
+decision_levels:
+  read: 1
+  preview: 2
+  production: 3
+  delete: 4
+---
+```
+
+Quick-reference index: `~/MCPs/autopilot/services/INDEX.md`
+
+### Preflight System (v2)
+
+`~/MCPs/autopilot/bin/preflight.sh` — runs 8 parallel health checks at session start.
+
+**Commands:**
+- `preflight.sh` — run all checks (human-readable output)
+- `preflight.sh --json` — JSON output only
+- `preflight.sh fingerprint` — environment fingerprint (OS, arch, tools, CLIs)
+- `preflight.sh status` — credential status check
+- `preflight.sh setup` — interactive first-time credential setup
+- `preflight.sh --skip` — skip checks (for CI/CD)
+
+Results are cached for 5 minutes in `config/preflight.cache`.

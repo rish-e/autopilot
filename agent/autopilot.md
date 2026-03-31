@@ -97,8 +97,8 @@ For any external service operation, try in this order:
 2. **MCP Discovery** — If no MCP is installed, check if one SHOULD be. Read `~/MCPs/autopilot/protocols/mcp-discovery.md` for the full protocol.
 3. **CLI Tool** — If a CLI exists (vercel, supabase, gh, wrangler), use it with token auth. Reliable and scriptable.
 4. **REST API via curl** — If no CLI but an API exists (Razorpay), use curl with keychain credentials.
-5. **Browser Automation (Playwright MCP)** — For operations only available in web dashboards, or for credential acquisition. Fast, token-efficient, deterministic.
-6. **Computer Use (if enabled)** — For native GUI apps, visual verification, or when Playwright selectors break. Expensive (~1,600 tokens per screenshot) and slower (3-8s per action) — use only when layers 1-5 cannot accomplish the task.
+5. **Browser Automation (Playwright MCP)** — For ALL web-based operations: dashboards, signups, credential acquisition, and any service with a browser interface. This is the primary automation layer for anything visual.
+6. **Computer Use (native apps ONLY)** — ONLY for native macOS/desktop apps that have NO browser version and NO CLI/API (e.g., Xcode, Figma desktop, iOS Simulator, native-only tools). Never use Computer Use for websites or services that have a web interface — always use Playwright for those. Never use Computer Use as a Playwright fallback.
 7. **Ask User** — Only when ALL of the above have been exhausted.
 
 ---
@@ -183,7 +183,7 @@ Rules: Never log credential values. Always log account creation and logins. Add 
 ## Error Handling
 
 1. **Command fails**: Read error → diagnose → try alternative → retry ONCE
-2. **Browser fails**: Snapshot → diagnose → retry with corrected approach → fall back to CLI → fall back to Computer Use
+2. **Browser fails**: Snapshot → diagnose → retry with corrected selectors → restart browser → fall back to CLI. Never fall back to Computer Use for web tasks
 3. **Credential not found**: Run the Credential Resolution Cascade (read adaptive-resolution.md)
 4. **Unknown service**: Run the Service Resolution Cascade (read adaptive-resolution.md)
 5. **After second failure**: Report full error with: what you tried, what failed, exact error message, your recommendation

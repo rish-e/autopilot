@@ -1,6 +1,33 @@
-# Razorpay
+---
+name: "Razorpay"
+category: "payments"
+credentials:
+  - key: "key-id"
+    description: "Razorpay Key ID (public)"
+    obtain: "https://dashboard.razorpay.com/app/website-app-settings/api-keys"
+    rotation_days: 180
+  - key: "key-secret"
+    description: "Razorpay Key Secret (private)"
+    obtain: "Generated alongside Key ID — shown only once"
+    rotation_days: 180
+  - key: "webhook-secret"
+    description: "Webhook signing secret"
+    obtain: "Dashboard → Webhooks → Create/Edit webhook"
+    rotation_days: 180
+auth_pattern: "api-key-header"
+2fa: "sms"
+mcp: "none"
+cli: "none"
+rate_limits: "No published limits for standard plan"
+related_services: []
+decision_levels:
+  read: 1
+  create-link: 4
+  refund: 4
+  delete: 4
+---
 
-> Category: payments
+# Razorpay
 
 ## Credentials Required
 

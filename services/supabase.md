@@ -1,6 +1,29 @@
-# Supabase
+---
+name: "Supabase"
+category: "database"
+credentials:
+  - key: "access-token"
+    description: "Supabase CLI access token"
+    obtain: "https://supabase.com/dashboard/account/tokens"
+    rotation_days: 90
+  - key: "db-password-{ref}"
+    description: "Per-project database password"
+    obtain: "Generated at project creation"
+    rotation_days: 180
+auth_pattern: "token-env"
+2fa: "email"
+mcp: "installable"
+cli: "supabase"
+rate_limits: "2 free projects, 500MB database, 1GB file storage"
+related_services: ["vercel", "cloudflare"]
+decision_levels:
+  read: 1
+  migration-dev: 2
+  migration-prod: 3
+  delete-project: 4
+---
 
-> Category: database
+# Supabase
 
 ## Credentials Required
 

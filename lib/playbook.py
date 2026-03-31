@@ -163,6 +163,7 @@ class PlaybookEngine:
                 "cli_tool": cli_info.get("tool") if cli_info else None,
                 "cli_install": cli_info.get("install") if cli_info else None,
                 "prefer_cli": True,
+                "auth_method": cli_info.get("auth_method", "password") if cli_info else "password",
             },
             "urls": urls or {
                 "home": f"https://{service}.com",
@@ -192,7 +193,8 @@ class PlaybookEngine:
                 },
                 {
                     "condition": "element_not_found",
-                    "action": "vision_fallback",
+                    "action": "retry_with_snapshot",
+                    "note": "Take browser_snapshot, find alternative selector, auto-heal playbook",
                 },
                 {
                     "condition": "timeout",
@@ -222,6 +224,7 @@ class PlaybookEngine:
             return [
                 {
                     "id": "navigate_signup",
+                    "intent": "Open the service signup page",
                     "action": "browser_navigate",
                     "params": {"url": urls.get("signup", f"https://{service}.com/signup")},
                     "expect": {"snapshot_contains": "sign up|create account|register|get started"},
@@ -229,29 +232,34 @@ class PlaybookEngine:
                 },
                 {
                     "id": "fill_email",
+                    "intent": "Enter account email address",
                     "action": "browser_type",
                     "params": {"field": "email", "text": "{{email}}"},
                     "note": "AGENT: update field ref from browser_snapshot",
                 },
                 {
                     "id": "fill_password",
+                    "intent": "Set the account password",
                     "action": "browser_type",
                     "params": {"field": "password", "text": "{{password}}"},
                     "note": "AGENT: update field ref from browser_snapshot",
                 },
                 {
                     "id": "submit_signup",
+                    "intent": "Submit the signup form",
                     "action": "browser_click",
                     "params": {"target": "submit/signup button"},
                     "note": "AGENT: update button ref from browser_snapshot",
                 },
                 {
                     "id": "check_result",
+                    "intent": "Verify signup succeeded or needs email confirmation",
                     "action": "browser_snapshot",
                     "expect": {"one_of": ["dashboard", "verify your email", "welcome", "confirm"]},
                 },
                 {
                     "id": "handle_email_verification",
+                    "intent": "Complete email verification if required",
                     "action": "verify_email",
                     "params": {
                         "sender": f"noreply@{service}.com",
@@ -265,33 +273,39 @@ class PlaybookEngine:
             return [
                 {
                     "id": "navigate_login",
+                    "intent": "Open the service login page",
                     "action": "browser_navigate",
                     "params": {"url": urls.get("login", f"https://{service}.com/login")},
                     "expect": {"snapshot_contains": "sign in|log in|email|password"},
                 },
                 {
                     "id": "fill_email",
+                    "intent": "Enter login email address",
                     "action": "browser_type",
                     "params": {"field": "email", "text": "{{email}}"},
                 },
                 {
                     "id": "fill_password",
+                    "intent": "Enter login password",
                     "action": "browser_type",
                     "params": {"field": "password", "text": "{{password}}"},
                 },
                 {
                     "id": "submit_login",
+                    "intent": "Submit the login form",
                     "action": "browser_click",
                     "params": {"target": "sign in button"},
                 },
                 {
                     "id": "handle_2fa",
+                    "intent": "Complete two-factor authentication if prompted",
                     "action": "totp",
                     "params": {"service": service},
                     "condition": "snapshot_contains:verification code|two-factor|2fa|authenticator",
                 },
                 {
                     "id": "verify_logged_in",
+                    "intent": "Confirm login was successful",
                     "action": "browser_snapshot",
                     "expect": {"snapshot_contains": "dashboard|home|overview|settings"},
                 },
@@ -301,12 +315,14 @@ class PlaybookEngine:
             return [
                 {
                     "id": "ensure_logged_in",
+                    "intent": "Ensure we have an active session",
                     "action": "run_flow",
                     "params": {"flow": "login"},
                     "condition": "not_logged_in",
                 },
                 {
                     "id": "navigate_tokens",
+                    "intent": "Navigate to the API token management page",
                     "action": "browser_navigate",
                     "params": {"url": urls.get("api_keys", f"https://{service}.com/settings/tokens")},
                     "expect": {"snapshot_contains": "token|api key|access key"},
@@ -314,28 +330,33 @@ class PlaybookEngine:
                 },
                 {
                     "id": "click_create",
+                    "intent": "Initiate creation of a new API token",
                     "action": "browser_click",
                     "params": {"target": "create token/key button"},
                     "note": "AGENT: update button ref from browser_snapshot",
                 },
                 {
                     "id": "name_token",
+                    "intent": "Name the token for identification",
                     "action": "browser_type",
                     "params": {"field": "token name", "text": "autopilot-{{timestamp}}"},
                     "condition": "snapshot_contains:name|label|description",
                 },
                 {
                     "id": "submit_create",
+                    "intent": "Confirm token creation",
                     "action": "browser_click",
                     "params": {"target": "create/generate button"},
                 },
                 {
                     "id": "capture_token",
+                    "intent": "Read the generated token value from the page",
                     "action": "browser_snapshot",
                     "note": "AGENT: extract token value from snapshot text, store via keychain",
                 },
                 {
                     "id": "store_in_keychain",
+                    "intent": "Securely store the token in OS keychain",
                     "action": "keychain_set",
                     "params": {"service": service, "key": "api-token"},
                     "note": "AGENT: pass captured token value",
@@ -347,6 +368,7 @@ class PlaybookEngine:
             return [
                 {
                     "id": "step_1",
+                    "intent": f"Complete the {flow} flow for {service}",
                     "action": "browser_navigate",
                     "params": {"url": f"https://{service}.com"},
                     "note": f"AGENT: research {service} {flow} flow and fill in steps",
@@ -397,6 +419,194 @@ class PlaybookEngine:
                                   sort_keys=False, allow_unicode=True, width=120)
                 except Exception:
                     pass  # non-critical
+
+    # ════════════════════════════════════════════════════════════════════════
+    # SELF-HEALING — auto-update selectors when they fail
+    # ════════════════════════════════════════════════════════════════════════
+
+    def heal_selector(self, service: str, flow: str, step_id: str,
+                      old_selector: str, new_selector: str,
+                      source: str = "snapshot") -> bool:
+        """Update a broken selector in a playbook step.
+
+        When Playwright can't find an element, the agent:
+        1. Takes a browser_snapshot to see the current page
+        2. Identifies the correct new selector from the snapshot
+        3. Calls this method to patch the playbook
+
+        The old selector is logged in selector_history for pattern detection.
+
+        Args:
+            service:      Service name
+            flow:         Flow name
+            step_id:      ID of the step with the broken selector
+            old_selector: The selector that failed
+            new_selector: The corrected selector from live page
+            source:       How the fix was found (snapshot, computer_use, manual)
+
+        Returns:
+            True if the playbook was updated, False if step not found.
+        """
+        yaml_path = PLAYBOOKS_DIR / service / f"{flow}.yaml"
+        if not yaml_path.exists():
+            return False
+
+        try:
+            with open(yaml_path) as f:
+                pb = yaml.safe_load(f)
+        except Exception:
+            return False
+
+        # Find the step and update it
+        updated = False
+        for step in pb.get("steps", []):
+            if step.get("id") == step_id:
+                params = step.get("params", {})
+
+                # Log the selector change in history
+                if "selector_history" not in step:
+                    step["selector_history"] = []
+                step["selector_history"].append({
+                    "old": old_selector,
+                    "new": new_selector,
+                    "source": source,
+                    "healed_at": datetime.now(timezone.utc).isoformat(),
+                })
+                # Keep only last 5 history entries
+                step["selector_history"] = step["selector_history"][-5:]
+
+                # Update the selector in params (check common param keys)
+                for key in ["field", "target", "selector", "element", "ref"]:
+                    if key in params and params[key] == old_selector:
+                        params[key] = new_selector
+                        updated = True
+                        break
+
+                # If no exact match in params, try text replacement in all string values
+                if not updated:
+                    for key, val in params.items():
+                        if isinstance(val, str) and old_selector in val:
+                            params[key] = val.replace(old_selector, new_selector)
+                            updated = True
+                            break
+
+                if updated:
+                    step["last_healed"] = datetime.now(timezone.utc).isoformat()
+                    step["heal_count"] = step.get("heal_count", 0) + 1
+                break
+
+        if updated:
+            # Bump version and save
+            pb["version"] = pb.get("version", 1) + 1
+            pb["last_healed"] = datetime.now(timezone.utc).isoformat()
+            with open(yaml_path, "w") as f:
+                yaml.dump(pb, f, default_flow_style=False,
+                          sort_keys=False, allow_unicode=True, width=120)
+
+        return updated
+
+    def heal_timing(self, service: str, flow: str, step_id: str,
+                    actual_wait_ms: int, succeeded: bool) -> bool:
+        """Auto-adjust wait/timeout durations based on execution history.
+
+        Tracks actual wait times that led to success vs failure, then
+        adjusts the step's timeout_ms to be ~1.5x the p90 successful wait.
+
+        Args:
+            service:        Service name
+            flow:           Flow name
+            step_id:        Step ID
+            actual_wait_ms: How long the wait actually took
+            succeeded:      Whether the step succeeded
+
+        Returns:
+            True if timing was adjusted, False otherwise.
+        """
+        yaml_path = PLAYBOOKS_DIR / service / f"{flow}.yaml"
+        if not yaml_path.exists():
+            return False
+
+        try:
+            with open(yaml_path) as f:
+                pb = yaml.safe_load(f)
+        except Exception:
+            return False
+
+        updated = False
+        for step in pb.get("steps", []):
+            if step.get("id") == step_id:
+                # Track timing history
+                if "timing_history" not in step:
+                    step["timing_history"] = []
+                step["timing_history"].append({
+                    "wait_ms": actual_wait_ms,
+                    "success": succeeded,
+                    "at": datetime.now(timezone.utc).isoformat(),
+                })
+                # Keep last 20 entries
+                step["timing_history"] = step["timing_history"][-20:]
+
+                # Calculate optimal timeout from successful waits
+                success_waits = [
+                    t["wait_ms"] for t in step["timing_history"] if t["success"]
+                ]
+                if len(success_waits) >= 3:
+                    success_waits.sort()
+                    p90_idx = int(len(success_waits) * 0.9)
+                    p90 = success_waits[min(p90_idx, len(success_waits) - 1)]
+                    optimal = int(p90 * 1.5)  # 50% buffer over p90
+
+                    params = step.get("params", {})
+                    old_timeout = params.get("timeout_ms", step.get("timeout_ms"))
+                    if old_timeout and abs(optimal - old_timeout) > old_timeout * 0.2:
+                        # Only adjust if >20% difference
+                        if "timeout_ms" in params:
+                            params["timeout_ms"] = optimal
+                        else:
+                            step["timeout_ms"] = optimal
+                        updated = True
+
+                break
+
+        if updated:
+            with open(yaml_path, "w") as f:
+                yaml.dump(pb, f, default_flow_style=False,
+                          sort_keys=False, allow_unicode=True, width=120)
+
+        return updated
+
+    def get_fragile_steps(self, service: str = None) -> list[dict]:
+        """Find playbook steps that break frequently (heal_count >= 3).
+
+        These steps need a more robust selector strategy — switch from
+        CSS selectors to role-based/label-based selectors, or add
+        multiple fallback selectors.
+        """
+        results = []
+        search_dirs = [PLAYBOOKS_DIR / service] if service else list(PLAYBOOKS_DIR.iterdir())
+
+        for svc_dir in search_dirs:
+            if not svc_dir.is_dir():
+                continue
+            for yaml_file in svc_dir.glob("*.yaml"):
+                try:
+                    with open(yaml_file) as f:
+                        pb = yaml.safe_load(f)
+                    for step in pb.get("steps", []):
+                        heal_count = step.get("heal_count", 0)
+                        if heal_count >= 3:
+                            results.append({
+                                "service": svc_dir.name,
+                                "flow": yaml_file.stem,
+                                "step_id": step.get("id", "?"),
+                                "heal_count": heal_count,
+                                "last_healed": step.get("last_healed"),
+                                "history": step.get("selector_history", []),
+                            })
+                except Exception:
+                    continue
+
+        return sorted(results, key=lambda x: x["heal_count"], reverse=True)
 
     # ════════════════════════════════════════════════════════════════════════
     # LIST — show all cached playbooks
@@ -554,21 +764,47 @@ def cli_services(engine: PlaybookEngine):
         print(f"  {svc:20s}  flows: {', '.join(flows)}")
 
 
+def cli_heal(engine: PlaybookEngine, service: str, flow: str,
+             step_id: str, old_sel: str, new_sel: str):
+    if engine.heal_selector(service, flow, step_id, old_sel, new_sel):
+        print(f"{GREEN}Healed{NC}: {service}/{flow} step '{step_id}'")
+        print(f"  {DIM}{old_sel}{NC} → {new_sel}")
+    else:
+        print(f"{RED}Failed{NC}: step '{step_id}' not found in {service}/{flow}",
+              file=sys.stderr)
+        sys.exit(1)
+
+
+def cli_fragile(engine: PlaybookEngine, service: str = None):
+    results = engine.get_fragile_steps(service)
+    if not results:
+        print("No fragile steps found. All selectors are stable.")
+        return
+    print(f"{BOLD}Fragile Steps{NC} (healed 3+ times — switch to role-based selectors)")
+    print()
+    for r in results:
+        print(f"  {r['service']}/{r['flow']}  step={r['step_id']}  "
+              f"healed={r['heal_count']}x  last={r.get('last_healed', 'unknown')}")
+
+
 def main():
     usage = f"""Usage: python3 playbook.py <command> [args]
 
 Commands:
-  list                          List all cached playbooks
-  get <service> <flow>          Show a playbook's YAML
-  generate <service> <flow>     Generate a playbook skeleton
-  services                      List services with playbooks
-  stats                         Show playbook statistics
-  has <service> <flow>          Check if playbook exists (exit 0/1)
+  list                                  List all cached playbooks
+  get <service> <flow>                  Show a playbook's YAML
+  generate <service> <flow>             Generate a playbook skeleton
+  services                              List services with playbooks
+  stats                                 Show playbook statistics
+  has <service> <flow>                  Check if playbook exists (exit 0/1)
+  heal <svc> <flow> <step> <old> <new>  Self-heal a broken selector
+  fragile [service]                     Show steps that break frequently
 
 Examples:
   python3 playbook.py generate vercel signup
   python3 playbook.py get vercel signup
-  python3 playbook.py list
+  python3 playbook.py heal vercel login fill_email "input[name=email]" "#email-field"
+  python3 playbook.py fragile
 """
 
     if len(sys.argv) < 2:
@@ -600,6 +836,15 @@ Examples:
                 print("Usage: playbook.py has <service> <flow>", file=sys.stderr)
                 sys.exit(1)
             sys.exit(0 if engine.has(sys.argv[2], sys.argv[3]) else 1)
+        elif cmd == "heal":
+            if len(sys.argv) < 7:
+                print("Usage: playbook.py heal <service> <flow> <step_id> <old_selector> <new_selector>",
+                      file=sys.stderr)
+                sys.exit(1)
+            cli_heal(engine, sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6])
+        elif cmd == "fragile":
+            svc = sys.argv[2] if len(sys.argv) > 2 else None
+            cli_fragile(engine, svc)
         else:
             print(f"Unknown command: {cmd}", file=sys.stderr)
             print(usage, file=sys.stderr)

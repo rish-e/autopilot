@@ -15,6 +15,8 @@
 #   keychain.sh delete <service> <key>
 #   keychain.sh has <service> <key>           # exit 0 if exists, 1 if not
 #   keychain.sh list [service]                # list stored credentials
+#   keychain.sh age <service> <key>           # show credential age in days
+#   keychain.sh check-ttl [max-days]          # show credentials older than max-days (default: 90)
 #
 # Security:
 #   - 'set' via stdin: value never appears in process list or shell history
@@ -25,6 +27,7 @@
 set -euo pipefail
 
 SERVICE_PREFIX="claude-autopilot"
+TTL_METADATA_DIR="${AUTOPILOT_DIR:-$HOME/MCPs/autopilot}/config/credential-ttl"
 
 # ─── Detect Platform ─────────────────────────────────────────────────────────
 
@@ -97,6 +100,48 @@ check_prerequisites() {
 
 check_prerequisites
 
+# ─── TTL Metadata ────────────────────────────────────────────────────────────
+
+ttl_record_set() {
+    # Record when a credential was stored/updated
+    local service="$1" key="$2"
+    mkdir -p "$TTL_METADATA_DIR"
+    local meta_file="$TTL_METADATA_DIR/${service}__${key}.meta"
+    date -u '+%Y-%m-%dT%H:%M:%SZ' > "$meta_file"
+}
+
+ttl_get_age_days() {
+    # Return the age of a credential in days, or -1 if unknown
+    local service="$1" key="$2"
+    local meta_file="$TTL_METADATA_DIR/${service}__${key}.meta"
+    if [ ! -f "$meta_file" ]; then
+        echo "-1"
+        return
+    fi
+    local stored_date
+    stored_date=$(cat "$meta_file")
+    local stored_epoch now_epoch
+    # macOS date vs GNU date
+    if date -j -f '%Y-%m-%dT%H:%M:%SZ' "$stored_date" '+%s' &>/dev/null; then
+        stored_epoch=$(date -j -f '%Y-%m-%dT%H:%M:%SZ' "$stored_date" '+%s')
+    else
+        stored_epoch=$(date -d "$stored_date" '+%s' 2>/dev/null || echo "0")
+    fi
+    now_epoch=$(date '+%s')
+    if [ "$stored_epoch" -eq 0 ]; then
+        echo "-1"
+        return
+    fi
+    local diff=$(( (now_epoch - stored_epoch) / 86400 ))
+    echo "$diff"
+}
+
+ttl_delete() {
+    local service="$1" key="$2"
+    local meta_file="$TTL_METADATA_DIR/${service}__${key}.meta"
+    rm -f "$meta_file" 2>/dev/null || true
+}
+
 # ─── Usage ───────────────────────────────────────────────────────────────────
 
 usage() {
@@ -108,6 +153,8 @@ usage() {
     echo "  delete <service> <key>       Delete a credential"
     echo "  has <service> <key>          Check if credential exists (exit 0/1)"
     echo "  list [service]               List stored credentials"
+    echo "  age <service> <key>          Show credential age in days (-1 if unknown)"
+    echo "  check-ttl [max-days]         Show credentials older than max-days (default: 90)"
     echo ""
     echo "Platform: $PLATFORM"
     exit 2
@@ -403,6 +450,9 @@ cmd_set() {
         linux)   linux_set "$service" "$key" "$value" ;;
         windows) windows_set "$service" "$key" "$value" ;;
     esac
+
+    # Record TTL metadata
+    ttl_record_set "$service" "$key"
 }
 
 cmd_delete() {
@@ -412,6 +462,8 @@ cmd_delete() {
         linux)   linux_delete "$service" "$key" ;;
         windows) windows_delete "$service" "$key" ;;
     esac
+    # Remove TTL metadata
+    ttl_delete "$service" "$key"
 }
 
 cmd_has() {
@@ -430,6 +482,69 @@ cmd_list() {
         linux)   linux_list "$service" ;;
         windows) windows_list "$service" ;;
     esac
+}
+
+cmd_age() {
+    local service="$1" key="$2"
+    local days
+    days=$(ttl_get_age_days "$service" "$key")
+    if [ "$days" -eq -1 ]; then
+        echo "unknown (no TTL metadata — credential predates TTL tracking)"
+    else
+        echo "${days} days"
+        # Warn if old
+        if [ "$days" -gt 90 ]; then
+            echo "WARNING: Credential is over 90 days old. Consider rotating." >&2
+        fi
+    fi
+}
+
+cmd_check_ttl() {
+    local max_days="${1:-90}"
+    local found=false
+
+    echo "Credentials older than ${max_days} days:"
+    echo ""
+
+    if [ ! -d "$TTL_METADATA_DIR" ]; then
+        echo "  No TTL metadata found. Credentials predate TTL tracking."
+        return
+    fi
+
+    for meta_file in "$TTL_METADATA_DIR"/*.meta; do
+        [ -f "$meta_file" ] || continue
+        local basename
+        basename=$(basename "$meta_file" .meta)
+        # Parse service__key from filename
+        local service="${basename%%__*}"
+        local key="${basename#*__}"
+
+        local days
+        days=$(ttl_get_age_days "$service" "$key")
+        if [ "$days" -ge "$max_days" ]; then
+            echo "  ⚠ ${service}/${key}: ${days} days old"
+            found=true
+        fi
+    done
+
+    # Also check credentials without TTL metadata
+    local all_creds
+    all_creds=$(cmd_list 2>/dev/null || true)
+    if [ -n "$all_creds" ]; then
+        while IFS= read -r cred; do
+            local svc="${cred%%/*}"
+            local k="${cred#*/}"
+            local meta_file="$TTL_METADATA_DIR/${svc}__${k}.meta"
+            if [ ! -f "$meta_file" ]; then
+                echo "  ? ${cred}: age unknown (predates TTL tracking)"
+                found=true
+            fi
+        done <<< "$all_creds"
+    fi
+
+    if ! $found; then
+        echo "  ✓ All credentials are within ${max_days}-day TTL"
+    fi
 }
 
 # ─── Main ────────────────────────────────────────────────────────────────────
@@ -460,6 +575,13 @@ case "$command" in
         ;;
     list)
         cmd_list "$@"
+        ;;
+    age)
+        [ $# -lt 2 ] && usage
+        cmd_age "$@"
+        ;;
+    check-ttl)
+        cmd_check_ttl "$@"
         ;;
     *)
         echo "ERROR: Unknown command: $command" >&2

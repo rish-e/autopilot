@@ -1,6 +1,25 @@
-# Vercel
+---
+name: "Vercel"
+category: "deployment"
+credentials:
+  - key: "api-token"
+    description: "Vercel API token"
+    obtain: "https://vercel.com/account/tokens → Create Token"
+    rotation_days: 90
+auth_pattern: "token-flag"
+2fa: "email"
+mcp: "installable"
+cli: "vercel"
+rate_limits: "100 deploys/day free tier, 6000 build minutes/month"
+related_services: ["github"]
+decision_levels:
+  read: 1
+  preview: 2
+  production: 3
+  delete: 4
+---
 
-> Category: deployment
+# Vercel
 
 ## Credentials Required
 

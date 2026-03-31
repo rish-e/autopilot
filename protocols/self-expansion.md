@@ -11,23 +11,49 @@ You can grow your own capabilities when you encounter something you don't know h
 #### 1. Create new service registry files
 When a task involves a service not in `~/MCPs/autopilot/services/`:
 
-1. Use WebSearch to research: `"{service} CLI documentation"`, `"{service} API authentication"`, `"{service} developer docs"`
-2. Use WebFetch to read the official docs
-3. Read the template: `~/MCPs/autopilot/services/_template.md`
-4. Create a new file at `~/MCPs/autopilot/services/{service-name}.md`
-5. Fill in: credentials required, CLI tool + install command, common operations with exact commands, browser fallback steps, 2FA handling
-6. Continue with the task using the registry you just created
+1. **OpenAPI auto-detection** (check BEFORE manual research):
+   ```
+   Try these URLs in order (use WebFetch, accept 404s silently):
+     https://{service-domain}/openapi.json
+     https://{service-domain}/swagger.json
+     https://{service-domain}/api-docs
+     https://{service-domain}/.well-known/openapi
+     https://api.{service-domain}/openapi.json
+   ```
+   If found: parse the spec to extract endpoints, auth methods, dangerous operations (DELETE/PUT endpoints, anything with "destroy", "purge", "revoke" in operationId).
+
+2. Use WebSearch to research: `"{service} CLI documentation"`, `"{service} API authentication"`, `"{service} developer docs"`
+3. Use WebFetch to read the official docs
+4. Read the template: `~/MCPs/autopilot/services/_template.md`
+5. Create a new file at `~/MCPs/autopilot/services/{service-name}.md`
+6. Fill in: credentials required, CLI tool + install command, common operations with exact commands, browser fallback steps, 2FA handling
+7. **Auto-generate guardian rules** from discovered dangerous operations:
+   - For each DELETE endpoint: `DESTRUCTIVE:::{service}.*delete.*{resource}:::Deleting {resource} on {service}`
+   - For each billing/payment endpoint: `FINANCIAL:::{service}.*charge|payment|invoice:::Financial operation on {service}`
+   - For each production/live endpoint: `DANGEROUS:::{service}.*prod|live|production:::Production operation on {service}`
+   - Append to: `~/MCPs/autopilot/config/guardian-custom-rules.txt`
+8. Continue with the task using the registry you just created
 
 **Do this inline** — don't stop to ask. Research, create the file, use it, keep going.
 
-#### 2. Install CLI tools
+#### 2. Install CLI tools (mise-first)
 When a task needs a CLI that isn't installed:
 
 1. Check: `which {tool}` — if not found:
-2. Search for install method: `brew search {tool}` or check the service docs
-3. Install: `brew install {tool}` or `npm install -g {tool}`
-4. Verify: `which {tool}` and `{tool} --version`
-5. Continue with the task
+2. **Try mise first** (if installed): `mise use -g {tool}@latest`
+   - mise handles version pinning, platform differences, and the entire asdf plugin ecosystem
+   - Verify: `which {tool}` and `{tool} --version`
+3. **Fallback to brew**: `brew install {tool}`
+4. **Fallback to npm**: `npm install -g {tool}`
+5. **Fallback to curl + verify**: Download binary, verify GPG/Sigstore signature if available
+6. Verify: `which {tool}` and `{tool} --version`
+7. Continue with the task
+
+**mise installation** (if not already present):
+```bash
+which mise || curl https://mise.run | sh
+```
+mise is the successor to asdf — faster (Rust, zero shim overhead), supports asdf plugins, adds env var management.
 
 #### 3. Add guardian safety rules
 When you create a new service registry and identify dangerous operations for that service, **append** new block patterns to the custom rules file:
@@ -77,17 +103,28 @@ When creating a new service registry file, always check if an MCP exists for tha
 When you encounter an unknown service mid-task:
 
 ```
-1. "I don't have a registry file for {service}."
-2. → Check trusted-mcps.yaml — is there a whitelisted MCP for this service?
-3. → If yes: install it silently with `claude mcp add` (takes effect next session)
-4. → WebSearch for "{service} CLI" and "{service} API docs"
-5. → If no whitelisted MCP: search for one. If found and non-whitelisted → present to user for approval.
-6. → WebFetch the official documentation
-7. → Create ~/MCPs/autopilot/services/{service}.md from template (include MCP info if found)
-8. → Identify dangerous operations → append to guardian-custom-rules.txt
-9. → Check if CLI exists, install if needed
-10. → Acquire credentials (browser-first — see Credential Acquisition Priority)
-11. → Continue with original task
+1.  "I don't have a registry file for {service}."
+2.  → Check `.well-known/mcp.json` on the service domain (SOTA discovery)
+      WebFetch: https://{service-domain}/.well-known/mcp.json
+      If found: extract transport, tools, auth requirements. Skip MCP search (step 4).
+3.  → Check trusted-mcps.yaml — is there a whitelisted MCP for this service?
+      If yes: install it silently with `claude mcp add` (takes effect next session)
+4.  → If no whitelisted MCP: search for one. Check:
+      a. Official MCP Registry: https://registry.modelcontextprotocol.io
+      b. Docker MCP Catalog: https://hub.docker.com/mcp
+      c. WebSearch: "{service} MCP server npm"
+      If found and non-whitelisted → present to user for approval.
+5.  → Try OpenAPI auto-detection (check /openapi.json, /swagger.json, /api-docs)
+6.  → WebSearch for "{service} CLI" and "{service} API docs"
+7.  → WebFetch the official documentation
+8.  → Create ~/MCPs/autopilot/services/{service}.md from template
+      Include: MCP info, OpenAPI endpoints, CLI details, auth method
+9.  → Auto-generate guardian rules from dangerous operations:
+      Parse OpenAPI spec or docs for DELETE/PUT/destructive endpoints
+      echo 'CATEGORY:::pattern:::reason' >> guardian-custom-rules.txt
+10. → Install CLI if needed (mise-first: mise → brew → npm → curl)
+11. → Acquire credentials (browser-first — see Credential Acquisition Priority)
+12. → Continue with original task
 ```
 
 This entire sequence should happen inline. The only pause points are:

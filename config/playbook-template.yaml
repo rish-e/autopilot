@@ -52,7 +52,7 @@ vars:
 #   expect:    what the page should contain after this step
 #   condition: only run if condition is met (optional)
 #   timeout:   per-step timeout override in ms (optional)
-#   fallback:  "vision" to use Computer Use if selector fails (optional)
+#   intent:    what this step is trying to achieve (for fallback reasoning)
 #   note:      instructions for the agent when generating/updating
 steps: []
 
@@ -74,7 +74,8 @@ on_error:
     message: "Account appears blocked/suspended on {{service}}"
 
   - condition: "element_not_found"
-    action: vision_fallback
+    action: retry_with_snapshot
+    note: "Take browser_snapshot, find alternative selector, auto-heal playbook"
 
   - condition: "timeout"
     action: screenshot_and_escalate

@@ -1,6 +1,25 @@
-# GitHub
+---
+name: "GitHub"
+category: "source-control, ci-cd"
+credentials:
+  - key: "token"
+    description: "GitHub Personal Access Token"
+    obtain: "https://github.com/settings/tokens → Generate new token"
+    rotation_days: 90
+auth_pattern: "cli-login"
+2fa: "authenticator"
+mcp: "installed"
+cli: "gh"
+rate_limits: "5000 API requests/hour authenticated, 2000 Actions minutes/month free"
+related_services: ["vercel", "cloudflare"]
+decision_levels:
+  read: 1
+  branch: 2
+  merge-main: 3
+  delete-repo: 4
+---
 
-> Category: source control, CI/CD
+# GitHub
 
 ## Credentials Required
 

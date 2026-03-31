@@ -73,22 +73,28 @@ CREATE INDEX IF NOT EXISTS idx_traces_created ON traces(created_at);
 CREATE TABLE IF NOT EXISTS procedures (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     name            TEXT NOT NULL UNIQUE,
+    summary         TEXT,
     task_pattern    TEXT NOT NULL,
     services        TEXT,
     domains         TEXT,
     steps_json      TEXT NOT NULL,
+    parent_id       INTEGER REFERENCES procedures(id),
     success_count   INTEGER DEFAULT 0,
     fail_count      INTEGER DEFAULT 0,
+    consec_fails    INTEGER DEFAULT 0,
     last_run_at     REAL,
     last_status     TEXT,
     avg_duration_ms INTEGER,
     avg_cost_usd    REAL,
+    deprecated      INTEGER DEFAULT 0,
+    deprecated_reason TEXT,
     version         INTEGER DEFAULT 1,
     created_at      REAL NOT NULL DEFAULT (unixepoch('subsec')),
     updated_at      REAL NOT NULL DEFAULT (unixepoch('subsec'))
 );
 CREATE INDEX IF NOT EXISTS idx_procedures_services ON procedures(services);
 CREATE INDEX IF NOT EXISTS idx_procedures_name ON procedures(name);
+CREATE INDEX IF NOT EXISTS idx_procedures_parent ON procedures(parent_id);
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- Deduplicated error patterns with learned resolutions
@@ -286,25 +292,73 @@ class AutopilotMemory:
     # ════════════════════════════════════════════════════════════════════════
 
     def save_procedure(self, name: str, task_pattern: str, steps: list,
-                       services: list = None, domains: list = None):
-        """Save or update a learned procedure."""
+                       services: list = None, domains: list = None,
+                       summary: str = None, parent_id: int = None):
+        """Save or update a learned procedure.
+
+        Supports skill composition (Voyager-style): procedures can reference
+        sub-procedures via parent_id for hierarchical composition. When a
+        procedure succeeds 3+ times, it becomes a reusable "skill" that
+        other procedures can invoke.
+
+        Two-tier discovery: summary (short) is used for quick listing,
+        task_pattern (full) for detailed matching.
+        """
         self.db.execute("""
-            INSERT INTO procedures (name, task_pattern, services, domains, steps_json)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO procedures (name, summary, task_pattern, services, domains,
+                                    steps_json, parent_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(name) DO UPDATE SET
                 task_pattern = excluded.task_pattern,
+                summary = COALESCE(excluded.summary, procedures.summary),
                 steps_json = excluded.steps_json,
-                services = COALESCE(excluded.services, services),
-                domains = COALESCE(excluded.domains, domains),
+                services = COALESCE(excluded.services, procedures.services),
+                domains = COALESCE(excluded.domains, procedures.domains),
+                parent_id = COALESCE(excluded.parent_id, procedures.parent_id),
+                deprecated = 0,
+                deprecated_reason = NULL,
+                consec_fails = 0,
                 version = version + 1,
                 updated_at = unixepoch('subsec')
         """, (
-            name, task_pattern,
+            name, summary, task_pattern,
             json.dumps(services) if services else None,
             json.dumps(domains) if domains else None,
-            json.dumps(steps)
+            json.dumps(steps), parent_id
         ))
         self.db.commit()
+
+    def get_skill(self, name: str) -> Optional[dict]:
+        """Get a procedure that qualifies as a skill (3+ successes, >80% rate).
+
+        Skills are mature procedures that can be referenced by other procedures.
+        This enables Voyager-style progressive complexity.
+        """
+        row = self.db.execute("""
+            SELECT *,
+                CASE WHEN (success_count + fail_count) > 0
+                     THEN (success_count * 1.0 / (success_count + fail_count))
+                     ELSE 0 END as success_rate
+            FROM procedures
+            WHERE name = ? AND success_count >= 3
+            AND (success_count * 1.0 / NULLIF(success_count + fail_count, 0)) >= 0.8
+        """, (name,)).fetchone()
+        return dict(row) if row else None
+
+    def list_skills(self) -> list[dict]:
+        """List all procedures that qualify as reusable skills."""
+        rows = self.db.execute("""
+            SELECT name, task_pattern, services, success_count, fail_count,
+                CASE WHEN (success_count + fail_count) > 0
+                     THEN ROUND(success_count * 100.0 / (success_count + fail_count), 1)
+                     ELSE 0 END as success_rate_pct,
+                version
+            FROM procedures
+            WHERE success_count >= 3
+            AND (success_count * 1.0 / NULLIF(success_count + fail_count, 0)) >= 0.8
+            ORDER BY success_count DESC
+        """).fetchall()
+        return [dict(r) for r in rows]
 
     def find_procedure(self, task_desc: str = None, services: list = None,
                        min_success_rate: float = 0.0) -> list[dict]:
@@ -334,6 +388,7 @@ class AutopilotMemory:
                      ELSE 0 END as success_rate
             FROM procedures
             WHERE ({where})
+            AND deprecated = 0
             AND CASE WHEN (success_count + fail_count) > 0
                      THEN (success_count * 1.0 / (success_count + fail_count))
                      ELSE 0 END >= ?
@@ -344,11 +399,18 @@ class AutopilotMemory:
 
     def record_procedure_run(self, name: str, success: bool,
                              duration_ms: int = 0, cost_usd: float = 0):
-        """Record success/failure for a procedure."""
+        """Record success/failure for a procedure.
+
+        Auto-deprecation: after 3 consecutive failures, the procedure is
+        marked deprecated with reason 'auto: 3 consecutive failures'.
+        Re-saving the procedure (via save_procedure) clears deprecation.
+        """
         col = "success_count" if success else "fail_count"
+        consec_update = "consec_fails = 0" if success else "consec_fails = consec_fails + 1"
         self.db.execute(f"""
             UPDATE procedures SET
                 {col} = {col} + 1,
+                {consec_update},
                 last_run_at = unixepoch('subsec'),
                 last_status = ?,
                 avg_duration_ms = CASE
@@ -364,18 +426,150 @@ class AutopilotMemory:
             WHERE name = ?
         """, ("ok" if success else "error", duration_ms, duration_ms,
               cost_usd, cost_usd, name))
+
+        # Auto-deprecate after 3 consecutive failures
+        if not success:
+            self.db.execute("""
+                UPDATE procedures SET
+                    deprecated = 1,
+                    deprecated_reason = 'auto: 3 consecutive failures',
+                    updated_at = unixepoch('subsec')
+                WHERE name = ? AND consec_fails >= 3 AND deprecated = 0
+            """, (name,))
+
         self.db.commit()
+
+    def deprecate_procedure(self, name: str, reason: str = "manual"):
+        """Manually deprecate a procedure."""
+        self.db.execute("""
+            UPDATE procedures SET deprecated = 1, deprecated_reason = ?,
+                updated_at = unixepoch('subsec')
+            WHERE name = ?
+        """, (reason, name))
+        self.db.commit()
+
+    def list_deprecated(self) -> list[dict]:
+        """List all deprecated procedures."""
+        rows = self.db.execute("""
+            SELECT name, summary, task_pattern, deprecated_reason,
+                   success_count, fail_count, consec_fails, updated_at
+            FROM procedures WHERE deprecated = 1
+            ORDER BY updated_at DESC
+        """).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_children(self, parent_name: str) -> list[dict]:
+        """Get child procedures (sub-steps) of a parent procedure."""
+        parent = self.db.execute(
+            "SELECT id FROM procedures WHERE name = ?", (parent_name,)
+        ).fetchone()
+        if not parent:
+            return []
+        rows = self.db.execute("""
+            SELECT name, summary, task_pattern, success_count, fail_count,
+                deprecated, version
+            FROM procedures WHERE parent_id = ?
+            ORDER BY name
+        """, (parent["id"],)).fetchall()
+        return [dict(r) for r in rows]
+
+    def detect_meta_procedures(self, min_shared_steps: int = 3) -> list[dict]:
+        """Detect potential meta-procedures from shared step patterns.
+
+        Finds pairs of procedures that share >= min_shared_steps steps,
+        suggesting they could be composed into a higher-level procedure.
+        Inspired by MACLA hierarchical composition.
+        """
+        rows = self.db.execute("""
+            SELECT id, name, steps_json FROM procedures
+            WHERE deprecated = 0 AND steps_json IS NOT NULL
+        """).fetchall()
+
+        if len(rows) < 2:
+            return []
+
+        # Extract step action names for comparison
+        proc_steps = {}
+        for r in rows:
+            try:
+                steps = json.loads(r["steps_json"])
+                # Extract action/description from each step
+                actions = []
+                for s in steps:
+                    if isinstance(s, dict):
+                        actions.append(s.get("action", s.get("description", str(s)))[:80])
+                    else:
+                        actions.append(str(s)[:80])
+                proc_steps[r["name"]] = set(actions)
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+        # Find overlapping pairs
+        candidates = []
+        names = list(proc_steps.keys())
+        for i in range(len(names)):
+            for j in range(i + 1, len(names)):
+                shared = proc_steps[names[i]] & proc_steps[names[j]]
+                if len(shared) >= min_shared_steps:
+                    candidates.append({
+                        "proc_a": names[i],
+                        "proc_b": names[j],
+                        "shared_steps": len(shared),
+                        "shared_actions": list(shared)[:5],
+                    })
+
+        candidates.sort(key=lambda x: x["shared_steps"], reverse=True)
+        return candidates[:10]
 
     # ════════════════════════════════════════════════════════════════════════
     # ERRORS
     # ════════════════════════════════════════════════════════════════════════
 
+    @staticmethod
+    def normalize_error(pattern: str) -> str:
+        """Normalize an error message for fingerprinting.
+
+        Strips volatile content (paths, timestamps, IDs, ports, hashes)
+        so structurally identical errors match the same fingerprint.
+        This follows Sentry-style error grouping best practices.
+        """
+        import re
+        s = pattern
+        # Strip absolute paths (macOS/Linux)
+        s = re.sub(r'/(?:Users|home|var|tmp|etc|opt|usr)/[\w./-]+', '<PATH>', s)
+        # Strip Windows-style paths
+        s = re.sub(r'[A-Z]:\\[\w.\\/-]+', '<PATH>', s)
+        # Strip ISO timestamps
+        s = re.sub(r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[\w.:+-]*', '<TIMESTAMP>', s)
+        # Strip Unix timestamps (10+ digits)
+        s = re.sub(r'\b\d{10,13}\b', '<TIMESTAMP>', s)
+        # Strip UUIDs
+        s = re.sub(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '<UUID>', s, flags=re.IGNORECASE)
+        # Strip hex hashes (SHA1, SHA256, etc.)
+        s = re.sub(r'\b[0-9a-f]{20,64}\b', '<HASH>', s, flags=re.IGNORECASE)
+        # Strip port numbers after host
+        s = re.sub(r':\d{4,5}\b', ':<PORT>', s)
+        # Strip IP addresses
+        s = re.sub(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '<IP>', s)
+        # Strip line numbers
+        s = re.sub(r'(?:line|Line|LINE)\s*\d+', 'line <N>', s)
+        # Strip generic IDs (numeric or alphanumeric with dashes, adjacent to id= patterns)
+        s = re.sub(r'(?:id|ID|Id)[=: ]+[a-zA-Z0-9_-]+', 'id=<ID>', s)
+        # Collapse whitespace
+        s = re.sub(r'\s+', ' ', s).strip()
+        return s
+
     def log_error(self, error_type: str, pattern: str,
                   service: str = None, action: str = None,
                   resolution: str = None, resolution_type: str = None):
-        """Log or increment a deduplicated error pattern."""
+        """Log or increment a deduplicated error pattern.
+
+        Automatically normalizes the pattern by stripping paths, timestamps,
+        IDs, and hashes so structurally identical errors are grouped together.
+        """
+        normalized = self.normalize_error(pattern)
         error_hash = hashlib.sha256(
-            f"{error_type}:{pattern}:{service or ''}".encode()
+            f"{error_type}:{normalized}:{service or ''}".encode()
         ).hexdigest()[:16]
 
         self.db.execute("""
@@ -387,12 +581,16 @@ class AutopilotMemory:
                 last_seen = unixepoch('subsec'),
                 resolution = COALESCE(excluded.resolution, errors.resolution),
                 resolution_type = COALESCE(excluded.resolution_type, errors.resolution_type)
-        """, (error_hash, error_type, pattern, service, action,
+        """, (error_hash, error_type, normalized, service, action,
               resolution, resolution_type))
         self.db.commit()
 
     def check_known_error(self, error_msg: str, service: str = None) -> Optional[dict]:
-        """Check if an error matches a known pattern with a resolution."""
+        """Check if an error matches a known pattern with a resolution.
+
+        Normalizes the input error message before matching, so structurally
+        identical errors match even with different paths/timestamps/IDs.
+        """
         conditions = ["resolution IS NOT NULL"]
         params = []
 
@@ -406,9 +604,14 @@ class AutopilotMemory:
             ORDER BY count DESC
         """, params).fetchall()
 
+        # Normalize the incoming error for comparison
+        normalized_msg = self.normalize_error(error_msg).lower()
         error_lower = error_msg.lower()
+
         for row in rows:
-            if row["pattern"].lower() in error_lower:
+            pattern_lower = row["pattern"].lower()
+            # Match against both normalized and raw versions
+            if pattern_lower in normalized_msg or pattern_lower in error_lower:
                 return dict(row)
         return None
 
@@ -549,6 +752,66 @@ class AutopilotMemory:
             WHERE created_at > ?
         """, (cutoff,)).fetchone()
         return dict(row) if row else {}
+
+    def estimate_task_cost(self, task_desc: str, services: list = None) -> dict:
+        """Estimate token cost before executing a task.
+
+        Looks at historical costs for similar tasks and services to predict
+        the likely cost of a new task. Returns estimated tokens, cost, and
+        confidence level based on how many similar tasks exist.
+        """
+        estimates = {"tokens": 0, "cost_usd": 0.0, "confidence": "none",
+                     "based_on_tasks": 0, "similar_tasks": []}
+
+        conditions = []
+        params = []
+
+        if task_desc:
+            words = [w for w in task_desc.lower().split() if len(w) > 2][:5]
+            for word in words:
+                conditions.append("LOWER(task_desc) LIKE ?")
+                params.append(f"%{word}%")
+
+        if services:
+            for svc in services:
+                conditions.append("LOWER(task_desc) LIKE ?")
+                params.append(f"%{svc.lower()}%")
+
+        if not conditions:
+            return estimates
+
+        where = " OR ".join(conditions)
+        rows = self.db.execute(f"""
+            SELECT task_desc,
+                SUM(COALESCE(tokens_in, 0) + COALESCE(tokens_out, 0)) as total_tokens,
+                SUM(COALESCE(cost_usd, 0)) as total_cost
+            FROM costs
+            WHERE ({where})
+            GROUP BY run_id
+            ORDER BY created_at DESC
+            LIMIT 10
+        """, params).fetchall()
+
+        if not rows:
+            return estimates
+
+        total_tokens = sum(r["total_tokens"] or 0 for r in rows)
+        total_cost = sum(r["total_cost"] or 0 for r in rows)
+        n = len(rows)
+
+        estimates["tokens"] = int(total_tokens / n)
+        estimates["cost_usd"] = round(total_cost / n, 4)
+        estimates["based_on_tasks"] = n
+        estimates["similar_tasks"] = [(r["task_desc"] or "")[:50] for r in rows[:3]]
+
+        if n >= 5:
+            estimates["confidence"] = "high"
+        elif n >= 2:
+            estimates["confidence"] = "medium"
+        else:
+            estimates["confidence"] = "low"
+
+        return estimates
 
     def get_cost_by_model(self, days: int = 7) -> list[dict]:
         """Get cost breakdown by model."""
@@ -753,9 +1016,13 @@ def cli_procedures(mem: AutopilotMemory):
         total = r["success_count"] + r["fail_count"]
         rate = (r["success_count"] / total * 100) if total > 0 else 0
         avg_ms = r["avg_duration_ms"] or 0
+        dep = f" {RED}[DEPRECATED]{NC}" if r["deprecated"] else ""
+        s = r["summary"] if r["summary"] else None
         print(f"  {r['name']:35s}  "
               f"runs={total:3d}  rate={rate:5.1f}%  "
-              f"avg={avg_ms/1000:.1f}s  v{r['version']}")
+              f"avg={avg_ms/1000:.1f}s  v{r['version']}{dep}")
+        if s:
+            print(f"    {DIM}{s}{NC}")
 
 
 def cli_log_error(mem: AutopilotMemory, args):
@@ -780,8 +1047,37 @@ def cli_save_procedure(mem: AutopilotMemory, args):
         task_pattern=args.description,
         steps=steps,
         services=services,
+        summary=getattr(args, 'summary', None),
+        parent_id=getattr(args, 'parent_id', None),
     )
     print(f"{GREEN}Saved procedure:{NC} {args.name}")
+
+
+def cli_deprecated(mem: AutopilotMemory):
+    rows = mem.list_deprecated()
+    if not rows:
+        print("No deprecated procedures.")
+        return
+    print(f"{BOLD}Deprecated Procedures{NC}")
+    print()
+    for r in rows:
+        total = r["success_count"] + r["fail_count"]
+        print(f"  {RED}{r['name']:35s}{NC}  runs={total:3d}  "
+              f"consec_fails={r['consec_fails']}  reason={r['deprecated_reason']}")
+
+
+def cli_meta_procedures(mem: AutopilotMemory, min_shared: int = 3):
+    candidates = mem.detect_meta_procedures(min_shared)
+    if not candidates:
+        print("No meta-procedure candidates found (need procedures with shared steps).")
+        return
+    print(f"{BOLD}Meta-Procedure Candidates{NC} (shared step patterns)")
+    print()
+    for c in candidates:
+        print(f"  {c['proc_a']}  +  {c['proc_b']}")
+        print(f"    {DIM}shared steps: {c['shared_steps']}  "
+              f"actions: {', '.join(c['shared_actions'][:3])}{NC}")
+        print()
 
 
 def cli_check_error(mem: AutopilotMemory, args):
@@ -865,6 +1161,35 @@ def cli_find_procedure(mem: AutopilotMemory, args):
             print(f"    services: {r['services']}")
 
 
+def cli_skills(mem: AutopilotMemory):
+    skills = mem.list_skills()
+    if not skills:
+        print("No skills yet. Procedures become skills after 3+ successes with >80% rate.")
+        return
+    print(f"{BOLD}Reusable Skills{NC} (mature procedures)")
+    print()
+    for s in skills:
+        print(f"  {s['name']:35s}  "
+              f"runs={s['success_count']:3d}  "
+              f"rate={s['success_rate_pct']:5.1f}%  "
+              f"v{s['version']}")
+        if s.get("services"):
+            print(f"    {DIM}services: {s['services']}{NC}")
+
+
+def cli_estimate_cost(mem: AutopilotMemory, args):
+    services = args.services.split(",") if args.services else None
+    est = mem.estimate_task_cost(args.task_description, services)
+    print(f"{BOLD}Cost Estimate{NC}")
+    print(f"  Task:       {args.task_description}")
+    print(f"  Confidence: {est['confidence']}")
+    print(f"  Est tokens: {est['tokens']:,}")
+    print(f"  Est cost:   ${est['cost_usd']:.4f}")
+    print(f"  Based on:   {est['based_on_tasks']} similar task(s)")
+    if est["similar_tasks"]:
+        print(f"  Examples:   {', '.join(est['similar_tasks'])}")
+
+
 def build_parser():
     """Build the argparse parser with all subcommands."""
     import argparse
@@ -902,6 +1227,8 @@ def build_parser():
     p_save_proc.add_argument("description", help="Task pattern description")
     p_save_proc.add_argument("steps_json", help="JSON string of procedure steps")
     p_save_proc.add_argument("--services", help="Comma-separated service names")
+    p_save_proc.add_argument("--summary", help="Short summary for two-tier discovery")
+    p_save_proc.add_argument("--parent-id", type=int, help="Parent procedure ID for composition")
 
     p_check_err = sub.add_parser("check-error", help="Check if an error has a known resolution")
     p_check_err.add_argument("error_message", help="The error message to look up")
@@ -928,6 +1255,24 @@ def build_parser():
 
     p_find_proc = sub.add_parser("find-procedure", help="Find procedures matching a task")
     p_find_proc.add_argument("task_description", help="Task description to search for")
+
+    # ── Skill composition (Tier 2 SOTA) ─────────────────────────────────
+    sub.add_parser("skills", help="List procedures that qualify as reusable skills (3+ successes, >80% rate)")
+
+    # ── Token budget estimation (Tier 2 SOTA) ───────────────────────────
+    p_estimate = sub.add_parser("estimate-cost", help="Estimate cost for a task based on history")
+    p_estimate.add_argument("task_description", help="Task description to estimate cost for")
+    p_estimate.add_argument("--services", help="Comma-separated service names")
+
+    # ── Procedure lifecycle (Tier 5 SOTA) ───────────────────────────────
+    sub.add_parser("deprecated", help="List deprecated procedures")
+
+    p_deprecate = sub.add_parser("deprecate", help="Manually deprecate a procedure")
+    p_deprecate.add_argument("name", help="Procedure name")
+    p_deprecate.add_argument("--reason", default="manual", help="Deprecation reason")
+
+    p_meta = sub.add_parser("meta-procedures", help="Detect meta-procedure candidates from shared steps")
+    p_meta.add_argument("--min-shared", type=int, default=3, help="Minimum shared steps")
 
     return parser
 
@@ -971,6 +1316,17 @@ def main():
             cli_record_run(mem, args)
         elif args.command == "find-procedure":
             cli_find_procedure(mem, args)
+        elif args.command == "skills":
+            cli_skills(mem)
+        elif args.command == "estimate-cost":
+            cli_estimate_cost(mem, args)
+        elif args.command == "deprecated":
+            cli_deprecated(mem)
+        elif args.command == "deprecate":
+            mem.deprecate_procedure(args.name, args.reason)
+            print(f"{YELLOW}Deprecated:{NC} {args.name} ({args.reason})")
+        elif args.command == "meta-procedures":
+            cli_meta_procedures(mem, args.min_shared)
     finally:
         mem.close()
 
