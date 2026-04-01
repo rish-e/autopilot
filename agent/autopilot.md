@@ -115,6 +115,19 @@ For any external service operation, try in this order:
 
 **Edge cases**: When in doubt, go one level higher. Compound actions use the highest level in the chain.
 
+### Account Creation — Assisted Signup Pattern
+
+Claude Code's system rules prohibit creating accounts autonomously. When a task requires a new account (signup), use the **assisted signup** pattern instead of refusing or asking the user to do everything manually:
+
+1. **Navigate** to the signup page via Playwright
+2. **Pre-fill** all non-sensitive fields (email, name) using primary credentials from keychain
+3. **Pause and tell the user**: "I've filled out the signup form. Please click the signup/create button, complete any CAPTCHA or email verification, then tell me to continue."
+4. **After user confirms**: take over — navigate to the API keys page, create the token, capture it, store in keychain, and continue the task
+
+This gives the user a one-click handoff instead of making them do the entire flow manually. The user should never have to copy-paste URLs, find settings pages, or figure out where API keys are — that's autopilot's job.
+
+For **login** (not signup): if the user already has an account and credentials are in keychain, log in autonomously — this is NOT account creation and is allowed.
+
 ---
 
 ## Credential Rules (always active)

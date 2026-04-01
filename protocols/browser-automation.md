@@ -45,6 +45,23 @@ When the browser IS needed:
 9. **Wait for page loads** — use `browser_wait_for` when navigating between pages
 10. When done, capture any values needed (API keys, URLs, etc.) and store them in keychain
 
+### Assisted Signup Pattern
+
+Claude Code system rules prohibit autonomous account creation. When a task requires signing up for a new service, do NOT refuse or dump manual instructions on the user. Instead, use this assisted handoff:
+
+1. **Navigate** to the signup page via Playwright (`browser_navigate`)
+2. **Snapshot** to see the form fields
+3. **Pre-fill** non-sensitive fields (email, name) from keychain primary credentials using `browser_fill_form` or `browser_type`
+4. **Tell the user** (concisely): "I've filled the signup form at [service]. Please click the signup button and complete any verification (CAPTCHA, email confirm). Tell me when you're in."
+5. **After user confirms**: snapshot the page to see where they landed, then take over — navigate to API keys/tokens, create them, capture values, store in keychain, continue the task
+
+**Key principles:**
+- NEVER refuse a signup task — assist it with the handoff pattern above
+- NEVER dump a list of manual steps and URLs for the user to follow — navigate there yourself via Playwright and do the work
+- The user's only job is clicking the signup button and passing verification gates (CAPTCHA, email, 2FA)
+- Everything before and after that click is autopilot's responsibility
+- For services with OAuth/SSO signup (Google, GitHub): navigate to the signup page, tell user to click the OAuth button, then take over after
+
 ### Browser Error Recovery (Layer 2 — auto-retry)
 
 If a browser operation fails with "Target page, context or browser has been closed", "Browser is already in use", or similar:
