@@ -210,8 +210,12 @@ if [[ "$CMD_LOWER" =~ (crontab[[:space:]]+-[erl])|(crontab[[:space:]]+[^[:space:
     block "EVASION" "Crontab modification — schedules commands outside guardian supervision"
 fi
 
-if [[ "$CMD_LOWER" =~ (^|[[:space:]\;\&\|])(at|batch)[[:space:]] ]]; then
-    block "EVASION" "at/batch schedules deferred command execution — bypasses guardian"
+# Match actual 'at' command (with time args), not the word "at" in prose/heredocs
+if [[ "$CMD_LOWER" =~ (^|[\;\&\|][[:space:]]*)(at)[[:space:]]+(now|noon|midnight|teatime|tomorrow|[0-9]|-[fmMlbdq]) ]]; then
+    block "EVASION" "at command schedules deferred command execution — bypasses guardian"
+fi
+if [[ "$CMD_LOWER" =~ (^|[\;\&\|][[:space:]]*)(batch)[[:space:]] ]]; then
+    block "EVASION" "batch schedules deferred command execution — bypasses guardian"
 fi
 
 # ── Category 2: System destruction (regex) ──

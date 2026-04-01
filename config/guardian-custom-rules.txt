@@ -13,14 +13,15 @@
 # - Each rule makes the system MORE restrictive, never less
 #
 
-DESTRUCTIVE:::kill.*playwright:::Killing Playwright MCP process — disconnects browser automation permanently
-DESTRUCTIVE:::pkill.*playwright:::Killing Playwright MCP process — disconnects browser automation permanently
-DESTRUCTIVE:::killall.*playwright:::Killing Playwright MCP process — disconnects browser automation permanently
-DESTRUCTIVE:::kill.*mcp:::Killing MCP server process — must be restarted by Claude Code harness
-DESTRUCTIVE:::pkill.*mcp:::Killing MCP server process — must be restarted by Claude Code harness
-DESTRUCTIVE:::killall.*mcp:::Killing MCP server process — must be restarted by Claude Code harness
-CREDENTIAL:::echo.*totp-seed|printf.*totp-seed|cat.*totp-seed:::Exposing TOTP seed value — seeds must stay in keychain
-CREDENTIAL:::totp\.sh.*generate.*\|.*(curl|wget|nc):::Piping TOTP code to network — codes are ephemeral
+# Block killing MCP SERVER processes (Node.js), but NOT browser binaries (mcp-chrome)
+DESTRUCTIVE:::kill.*playwright-mcp|kill.*playwright.*server:::Killing Playwright MCP server process
+DESTRUCTIVE:::pkill.*playwright-mcp|pkill.*playwright.*server:::Killing Playwright MCP server process
+DESTRUCTIVE:::killall.*playwright-mcp|killall.*playwright.*server:::Killing Playwright MCP server process
+DESTRUCTIVE:::kill.*(mcp-server|mcp_server|mcp.*node):::Killing MCP server process
+DESTRUCTIVE:::pkill.*(mcp-server|mcp_server|mcp.*node):::Killing MCP server process
+DESTRUCTIVE:::killall.*(mcp-server|mcp_server|mcp.*node):::Killing MCP server process
+CREDENTIAL:::echo.*totp-seed|printf.*totp-seed|cat.*totp-seed:::Exposing TOTP seed value
+CREDENTIAL:::totp\.sh.*generate.*\|.*(curl|wget|nc):::Piping TOTP code to network
 CREDENTIAL:::memory\.db.*(scp|curl):::Exfiltrating memory database
 DESTRUCTIVE:::rm.*memory\.db:::Deleting Autopilot memory database
 DESTRUCTIVE:::rm.*-rf.*playbooks:::Deleting cached playbooks directory
