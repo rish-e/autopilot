@@ -797,6 +797,8 @@ Commands:
   services                              List services with playbooks
   stats                                 Show playbook statistics
   has <service> <flow>                  Check if playbook exists (exit 0/1)
+  save <service> <flow> [yaml_file]      Save a playbook from YAML file (or stdin)
+  record <service> <flow> <ok|fail> [ms] Record a playbook execution result
   heal <svc> <flow> <step> <old> <new>  Self-heal a broken selector
   fragile [service]                     Show steps that break frequently
 
@@ -842,6 +844,32 @@ Examples:
                       file=sys.stderr)
                 sys.exit(1)
             cli_heal(engine, sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6])
+        elif cmd == "save":
+            if len(sys.argv) < 4:
+                print("Usage: playbook.py save <service> <flow> [yaml_file]", file=sys.stderr)
+                print("  If no yaml_file, reads YAML from stdin.", file=sys.stderr)
+                sys.exit(1)
+            service, flow = sys.argv[2], sys.argv[3]
+            if len(sys.argv) >= 5:
+                with open(sys.argv[4]) as f:
+                    pb = yaml.safe_load(f)
+            else:
+                pb = yaml.safe_load(sys.stdin)
+            if not pb:
+                print(f"{RED}Error:{NC} Empty or invalid YAML", file=sys.stderr)
+                sys.exit(1)
+            path = engine.save(service, flow, pb, generated_by="agent")
+            print(f"{GREEN}Saved:{NC} {service}/{flow} -> {path}")
+        elif cmd == "record":
+            if len(sys.argv) < 5:
+                print("Usage: playbook.py record <service> <flow> <ok|fail> [duration_ms]", file=sys.stderr)
+                sys.exit(1)
+            service, flow = sys.argv[2], sys.argv[3]
+            success = sys.argv[4].lower() in ("ok", "success", "true", "1")
+            duration_ms = int(sys.argv[5]) if len(sys.argv) >= 6 else 0
+            engine.record_run(service, flow, success, duration_ms)
+            status = f"{GREEN}ok{NC}" if success else f"{RED}fail{NC}"
+            print(f"Recorded: {service}/{flow} [{status}]")
         elif cmd == "fragile":
             svc = sys.argv[2] if len(sys.argv) > 2 else None
             cli_fragile(engine, svc)

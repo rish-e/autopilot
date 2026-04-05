@@ -69,14 +69,15 @@ Done. Preview: https://myapp-abc123.vercel.app
 Before any task that involves external services, run `~/MCPs/autopilot/bin/preflight.sh`. If it fails, run `preflight.sh setup` to collect primary credentials before proceeding. Also run `~/MCPs/autopilot/bin/chrome-debug.sh clean-locks` to prevent stale browser lock errors.
 
 1. **Check for saved session**: Run `~/MCPs/autopilot/bin/session.sh status`. If a saved session exists, tell the user and offer to resume from where it left off, or start fresh.
-2. **Analyze** the task silently (check services, prerequisites, credentials, decision levels)
-3. **Present a numbered plan** — every step you will take, in order
-4. **Wait for a single "proceed"** (or "yes" / "go" / "do it")
-5. **Create a snapshot** before executing: `~/MCPs/autopilot/bin/snapshot.sh create pre-<task-slug>`. Additionally, auto-snapshot before each individual L3+ step within the plan. If any L3+ step fails, auto-rollback with `snapshot.sh rollback` before retrying.
-6. **Save the session**: `~/MCPs/autopilot/bin/session.sh save "<task description>"` — then update it with the plan via `session.sh update '{"plan": ["step 1", "step 2", ...]}'`
-7. **Execute everything end-to-end** — print brief status lines as you go. After each step completes, update the session: `~/MCPs/autopilot/bin/session.sh update '{"current_step": N, "completed": [1,2,...], "notes": "..."}'`
-8. **Report** the full result at the end. Include: "Snapshot `pre-<task-slug>` available — run `snapshot.sh rollback` to undo all changes."
-9. **Clear the session**: `~/MCPs/autopilot/bin/session.sh clear`
+2. **Check procedure memory**: Run `python3 ~/MCPs/autopilot/lib/memory.py find-procedure "{task}"`. If a high-confidence match exists (success_rate > 80%, runs > 2), use that procedure as the plan instead of reasoning from scratch.
+3. **Analyze** the task silently (check services, prerequisites, credentials, decision levels)
+4. **Present a numbered plan** — every step you will take, in order
+5. **Wait for a single "proceed"** (or "yes" / "go" / "do it")
+6. **Create a snapshot** before executing: `~/MCPs/autopilot/bin/snapshot.sh create pre-<task-slug>`. Additionally, auto-snapshot before each individual L3+ step within the plan. If any L3+ step fails, auto-rollback with `snapshot.sh rollback` before retrying.
+7. **Save the session**: `~/MCPs/autopilot/bin/session.sh save "<task description>"` — then update it with the plan via `session.sh update '{"plan": ["step 1", "step 2", ...]}'`
+8. **Execute everything end-to-end** — print brief status lines as you go. After each step completes, update the session: `~/MCPs/autopilot/bin/session.sh update '{"current_step": N, "completed": [1,2,...], "notes": "..."}'`
+9. **Report** the full result at the end. Include: "Snapshot `pre-<task-slug>` available — run `snapshot.sh rollback` to undo all changes."
+10. **Post-task learning** — record what happened (see Post-Task Learning below), then clear the session: `~/MCPs/autopilot/bin/session.sh clear`
 
 ### The No-Pause Rule
 
@@ -86,6 +87,26 @@ Before any task that involves external services, run `~/MCPs/autopilot/bin/prefl
 - A step **fails twice AND the resolution engine has no fix** — report the error and your recommendation
 
 Status updates are fine. Stopping to ask is not. The user said "proceed" once — that covers everything in the plan.
+
+### Post-Task Learning
+
+After EVERY task completion (success or failure), record what happened so future runs are faster:
+
+1. **On success** — save the procedure:
+   ```
+   python3 ~/MCPs/autopilot/lib/memory.py save-procedure "{name}" "{task_description}" '{steps_json}' --services "{svc1},{svc2}"
+   ```
+2. **On failure** — log the error with resolution (if found):
+   ```
+   python3 ~/MCPs/autopilot/lib/memory.py log-error "{error_type}" "{pattern}" --service "{svc}" --resolution "{fix}"
+   ```
+3. **If browser automation was used** — save the working playbook:
+   ```
+   python3 ~/MCPs/autopilot/lib/playbook.py save {service} {flow}
+   python3 ~/MCPs/autopilot/lib/playbook.py record {service} {flow} {success|fail} [duration_ms]
+   ```
+
+This creates a learning loop: future tasks check procedure memory first, known errors get auto-resolved, and playbooks improve over time.
 
 ---
 
@@ -206,7 +227,7 @@ Rules: Never log credential values. Always log account creation and logins. Add 
 
 ## Error Handling
 
-1. **Command fails**: Read error → diagnose → try alternative → retry ONCE. If the failed command was L3+, auto-rollback: `snapshot.sh rollback`
+1. **Command fails**: First check error memory: `python3 lib/memory.py check-error "{error}" --service "{svc}"`. If known fix exists, apply it. Otherwise: diagnose → try alternative → retry ONCE. After resolution, log it: `python3 lib/memory.py log-error ...`. If the failed command was L3+, auto-rollback: `snapshot.sh rollback`
 2. **Browser fails**: **NEVER use `kill`/`pkill`/`killall` to fix browser issues.** Instead: `chrome-debug.sh clean-locks` → `browser_close` MCP tool → `chrome-debug.sh restart` → try CLI instead → `chrome-debug.sh reset` → tell user. Read `protocols/browser-automation.md` for full cascade. Never fall back to Computer Use for web tasks.
 3. **Credential not found**: Run the Credential Resolution Cascade (read adaptive-resolution.md)
 4. **Unknown service**: Run the Service Resolution Cascade (read adaptive-resolution.md)
