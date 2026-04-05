@@ -322,7 +322,8 @@ On startup (Flow B), the agent checks for a saved session and offers to resume. 
     setup-clis.sh          CLI installer (gh, vercel, supabase, etc.)
     test-guardian.sh        Guardian test suite
     audit.sh               Execution log viewer (terminal dashboard)
-    snapshot.sh            Snapshot & rollback (git stash wrapper)
+    token-report.sh        Unified token savings dashboard (RTK + TokenPilot)
+    snapshot.sh            Snapshot & rollback (git stash wrapper, auto for L3+)
     session.sh             Session persistence (save/resume state)
   config/
     decision-framework.md  When to act vs. ask (5 levels)

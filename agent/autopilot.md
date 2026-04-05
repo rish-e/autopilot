@@ -72,7 +72,7 @@ Before any task that involves external services, run `~/MCPs/autopilot/bin/prefl
 2. **Analyze** the task silently (check services, prerequisites, credentials, decision levels)
 3. **Present a numbered plan** — every step you will take, in order
 4. **Wait for a single "proceed"** (or "yes" / "go" / "do it")
-5. **Create a snapshot** before executing: `~/MCPs/autopilot/bin/snapshot.sh create pre-<task-slug>`
+5. **Create a snapshot** before executing: `~/MCPs/autopilot/bin/snapshot.sh create pre-<task-slug>`. Additionally, auto-snapshot before each individual L3+ step within the plan. If any L3+ step fails, auto-rollback with `snapshot.sh rollback` before retrying.
 6. **Save the session**: `~/MCPs/autopilot/bin/session.sh save "<task description>"` — then update it with the plan via `session.sh update '{"plan": ["step 1", "step 2", ...]}'`
 7. **Execute everything end-to-end** — print brief status lines as you go. After each step completes, update the session: `~/MCPs/autopilot/bin/session.sh update '{"current_step": N, "completed": [1,2,...], "notes": "..."}'`
 8. **Report** the full result at the end. Include: "Snapshot `pre-<task-slug>` available — run `snapshot.sh rollback` to undo all changes."
@@ -100,6 +100,17 @@ For any external service operation, try in this order:
 5. **Browser Automation (Playwright MCP)** — For ALL web-based operations: dashboards, signups, credential acquisition, and any service with a browser interface. This is the primary automation layer for anything visual.
 6. **Computer Use (native apps ONLY)** — ONLY for native macOS/desktop apps that have NO browser version and NO CLI/API (e.g., Xcode, Figma desktop, iOS Simulator, native-only tools). Never use Computer Use for websites or services that have a web interface — always use Playwright for those. Never use Computer Use as a Playwright fallback.
 7. **Ask User** — Only when ALL of the above have been exhausted.
+
+### Code Exploration — JCodeMunch-First
+
+When exploring or understanding code, prefer JCodeMunch over raw file reads to minimize token usage:
+
+1. **Outline first** — `mcp__jcodemunch__get_file_outline` or `get_repo_outline` to discover structure without reading full files
+2. **Targeted symbols** — `mcp__jcodemunch__get_symbol` / `get_symbols` to fetch only the specific functions/classes you need
+3. **Search** — `mcp__jcodemunch__search_symbols` or `search_text` for cross-file discovery
+4. **Raw Read** — Only when JCodeMunch can't help (binary files, unsupported languages, config files, or files not yet indexed)
+
+This applies to code exploration, refactoring scope analysis, and dependency tracing. Use `index_folder` first if the project hasn't been indexed yet.
 
 ---
 
@@ -195,7 +206,7 @@ Rules: Never log credential values. Always log account creation and logins. Add 
 
 ## Error Handling
 
-1. **Command fails**: Read error → diagnose → try alternative → retry ONCE
+1. **Command fails**: Read error → diagnose → try alternative → retry ONCE. If the failed command was L3+, auto-rollback: `snapshot.sh rollback`
 2. **Browser fails**: **NEVER use `kill`/`pkill`/`killall` to fix browser issues.** Instead: `chrome-debug.sh clean-locks` → `browser_close` MCP tool → `chrome-debug.sh restart` → try CLI instead → `chrome-debug.sh reset` → tell user. Read `protocols/browser-automation.md` for full cascade. Never fall back to Computer Use for web tasks.
 3. **Credential not found**: Run the Credential Resolution Cascade (read adaptive-resolution.md)
 4. **Unknown service**: Run the Service Resolution Cascade (read adaptive-resolution.md)
@@ -229,6 +240,7 @@ Guardian (`guardian.sh`) is a PreToolUse hook that blocks dangerous commands. It
 | Snapshot | `~/MCPs/autopilot/bin/snapshot.sh` |
 | Session | `~/MCPs/autopilot/bin/session.sh` |
 | Audit | `~/MCPs/autopilot/bin/audit.sh` |
+| Token Report | `~/MCPs/autopilot/bin/token-report.sh` |
 | Memory | `python3 ~/MCPs/autopilot/lib/memory.py` |
 | Playbooks | `python3 ~/MCPs/autopilot/lib/playbook.py` |
 | Services | `~/MCPs/autopilot/services/{service}.md` |
