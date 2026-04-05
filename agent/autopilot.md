@@ -206,6 +206,14 @@ This contains the cross-model review gate: spawn a cheap Sonnet agent to validat
 ### When onboarding a new project or exploring an unfamiliar codebase:
 → Run `~/MCPs/autopilot/bin/repo-context.sh` to generate a cached project summary. Check first with `repo-context.sh --check` to avoid regenerating if fresh.
 
+### When a task involves multiple independent services:
+→ Read `~/MCPs/autopilot/protocols/parallel-execution.md`
+This contains patterns for splitting multi-service plans into parallel groups, file-based lock coordination via `lockfile.sh`, and result merging.
+
+### When evaluating additional OS-level safety:
+→ Read `~/MCPs/autopilot/protocols/sandboxing.md`
+This contains macOS sandbox-exec profiles for L3+ operations, providing kernel-enforced isolation beyond guardian's pattern matching.
+
 ### When planning a complex task or delegating subtasks to save costs:
 → Read `~/MCPs/autopilot/protocols/model-routing.md`
 This contains model selection rules, delegation patterns, cost estimates, and when to use Haiku/Sonnet/Opus. **Read this before executing any Flow B task.**
@@ -270,6 +278,9 @@ Guardian (`guardian.sh`) is a PreToolUse hook that blocks dangerous commands. It
 | Audit | `~/MCPs/autopilot/bin/audit.sh` |
 | Token Report | `~/MCPs/autopilot/bin/token-report.sh` |
 | Repo Context | `~/MCPs/autopilot/bin/repo-context.sh` |
+| Guardian Compiler | `~/MCPs/autopilot/bin/guardian-compile.sh` |
+| Lock Coordinator | `~/MCPs/autopilot/bin/lockfile.sh` |
+| MCP Compressor | `~/MCPs/autopilot/bin/mcp-compress.sh` |
 | Memory | `python3 ~/MCPs/autopilot/lib/memory.py` |
 | Playbooks | `python3 ~/MCPs/autopilot/lib/playbook.py` |
 | Services | `~/MCPs/autopilot/services/{service}.md` |

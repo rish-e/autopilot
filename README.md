@@ -324,6 +324,9 @@ On startup (Flow B), the agent checks for a saved session and offers to resume. 
     audit.sh               Execution log viewer (terminal dashboard)
     token-report.sh        Unified token savings dashboard (RTK + TokenPilot)
     repo-context.sh        Cached project summary for fast onboarding
+    guardian-compile.sh    YAML → compiled rules cache + validation
+    lockfile.sh            File-based lock coordination for parallel agents
+    mcp-compress.sh        Wrap MCP servers for ~97% schema token savings
     snapshot.sh            Snapshot & rollback (git stash wrapper, auto for L3+)
     session.sh             Session persistence (save/resume state)
   config/
