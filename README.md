@@ -70,6 +70,7 @@ Autopilot is a **general-purpose autonomous agent** — not limited to any speci
 | **Configure services** | Stripe, Razorpay, SendGrid, Resend, Sentry, Auth0, Clerk |
 | **Handle git** | Commits, branches, PRs, issues, Actions, releases |
 | **Browse the web** | Login to dashboards, fill forms, get API tokens |
+| **Control native apps** | Open/focus/quit macOS apps, click dialogs, read/write clipboard (AppleScript) |
 | **Install tools** | CLIs, MCP servers, dependencies |
 | **Teach itself** | Unknown service? Researches docs, creates registry, installs CLI, keeps going |
 
@@ -110,7 +111,7 @@ The 5 pre-built service files are just a head start. Autopilot self-expands when
   +--------------------------+  +--------------------------+
 ```
 
-**Priority:** MCP > CLI > API > Browser > Ask user
+**Priority:** MCP > CLI > API > Browser > **AppleScript** > Computer Use > Ask user
 
 ---
 
@@ -153,6 +154,33 @@ The 5 pre-built service files are just a head start. Autopilot self-expands when
        v
   Command Executes (no prompt)
 ```
+
+### AppleScript GUI Automation (macOS)
+
+> Native app control via AppleScript — faster and more reliable than pixel-clicking for scriptable apps.
+
+```bash
+# Open and focus an app
+osascript.sh run app-control open "Figma"
+
+# Get context: what's frontmost?
+osascript.sh run frontmost-info
+# → {"app":"Figma","bundle_id":"com.figma.Desktop","window_title":"My Design","pid":5432}
+
+# Click a system dialog button
+osascript.sh run handle-system-dialog "Replace"
+
+# Read/write clipboard
+osascript.sh run clipboard set "text to paste"
+```
+
+**Built-in scripts:** `app-control`, `frontmost-info`, `handle-system-dialog`, `clipboard`. Add new `.applescript` files to `applescripts/` — guardian auto-whitelists them.
+
+**Security:** Guardian blocks all inline `osascript -e` (shell escape via `do shell script`), JXA, and non-whitelisted paths. Only `.applescript` files from `applescripts/` are allowed. macOS-only; skips gracefully on other platforms.
+
+**When used:** Between Playwright (browser) and Computer Use (pixel-clicking) in the priority order. Faster and more reliable than Computer Use for any app with a scripting dictionary.
+
+---
 
 ### Persistent Browser
 
@@ -327,6 +355,12 @@ On startup (Flow B), the agent checks for a saved session and offers to resume. 
     mcp-compress.sh        Wrap MCP servers for ~97% schema token savings
     snapshot.sh            Snapshot & rollback (git stash wrapper, auto for L3+)
     session.sh             Session persistence (save/resume state)
+    osascript.sh           Safe AppleScript runner (macOS only, whitelist-enforced)
+  applescripts/            AppleScript playbooks (macOS GUI automation)
+    app-control.applescript       Open / focus / quit / status apps
+    handle-system-dialog.applescript  Click buttons on dialogs and sheets
+    clipboard.applescript          Read / write / clear clipboard
+    frontmost-info.applescript     Frontmost app JSON (name, bundle ID, title, PID)
   config/
     decision-framework.md  When to act vs. ask (5 levels)
     guardian-rules.yaml    Declarative safety rules (auditable, versioned)
@@ -366,6 +400,7 @@ your-project/.autopilot/
 | Financial | Stripe charges, sending emails |
 | MCP process termination | Targeting Playwright/MCP servers |
 | Obfuscation | `base64\|bash`, `bash -c`, `eval` |
+| AppleScript inline | `osascript -e`, JXA (`-l JavaScript`), non-whitelisted paths |
 
 </td>
 <td width="50%">

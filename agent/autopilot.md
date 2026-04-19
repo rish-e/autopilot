@@ -97,8 +97,9 @@ For any external service operation, try in this order:
 3. **CLI Tool** — If a CLI exists (vercel, supabase, gh, wrangler), use it with token auth. Reliable and scriptable.
 4. **REST API via curl** — If no CLI but an API exists (Razorpay), use curl with keychain credentials.
 5. **Browser Automation (Playwright MCP)** — For ALL web-based operations: dashboards, signups, credential acquisition, and any service with a browser interface. This is the primary automation layer for anything visual.
-6. **Computer Use (native apps ONLY)** — ONLY for native macOS/desktop apps that have NO browser version and NO CLI/API (e.g., Xcode, Figma desktop, iOS Simulator, native-only tools). Never use Computer Use for websites or services that have a web interface — always use Playwright for those. Never use Computer Use as a Playwright fallback.
-7. **Ask User** — Only when ALL of the above have been exhausted.
+6. **AppleScript (macOS only)** — For native macOS apps with scripting support (Figma desktop, system dialogs, clipboard, app lifecycle). Use `~/MCPs/autopilot/bin/osascript.sh run <script>`. Only on macOS; skip gracefully on other platforms. Read `protocols/gui-automation.md` before using. Never use for anything with a web interface — use Playwright for those.
+7. **Computer Use (native apps ONLY)** — ONLY for native macOS/desktop apps that have NO scripting dictionary and NO CLI/API — pixel-clicking as a last resort. Never use Computer Use for websites or services that have a web interface — always use Playwright for those. Never use Computer Use as a Playwright fallback.
+8. **Ask User** — Only when ALL of the above have been exhausted.
 
 ### Code Exploration — JCodeMunch-First
 
@@ -179,6 +180,10 @@ This contains the cross-model review gate: spawn a cheap Sonnet agent to validat
 → Read `~/MCPs/autopilot/protocols/parallel-execution.md`
 This contains patterns for splitting multi-service plans into parallel groups, file-based lock coordination via `lockfile.sh`, and result merging.
 
+### When using AppleScript / GUI automation on macOS:
+→ Read `~/MCPs/autopilot/protocols/gui-automation.md`
+This contains: when to use AppleScript vs Playwright vs Computer Use, available scripts, required permissions (Accessibility, Automation), error codes, and how to add new scripts.
+
 ### When evaluating additional OS-level safety:
 → Read `~/MCPs/autopilot/protocols/sandboxing.md`
 This contains macOS sandbox-exec profiles for L3+ operations, providing kernel-enforced isolation beyond guardian's pattern matching.
@@ -250,6 +255,8 @@ Guardian (`guardian.sh`) is a PreToolUse hook that blocks dangerous commands. It
 | Guardian Compiler | `~/MCPs/autopilot/bin/guardian-compile.sh` |
 | Lock Coordinator | `~/MCPs/autopilot/bin/lockfile.sh` |
 | MCP Compressor | `~/MCPs/autopilot/bin/mcp-compress.sh` |
+| AppleScript Runner | `~/MCPs/autopilot/bin/osascript.sh` |
+| AppleScript Playbooks | `~/MCPs/autopilot/applescripts/*.applescript` |
 | Memory | `python3 ~/MCPs/autopilot/lib/memory.py` |
 | Playbooks | `python3 ~/MCPs/autopilot/lib/playbook.py` |
 | Services | `~/MCPs/autopilot/services/{service}.md` |

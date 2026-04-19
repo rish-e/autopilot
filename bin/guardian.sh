@@ -373,6 +373,27 @@ if [[ "$CMD_LOWER" =~ wget[[:space:]].*(--post-data|--post-file|--method[[:space
     fi
 fi
 
+# ── Category 10: AppleScript / GUI Automation ──
+# Whitelist approach: only allow .applescript files from the approved directory.
+# Inline (-e) and JXA (-l JavaScript) are always blocked — they can exec shell
+# commands via "do shell script" / ObjC NSTask, bypassing guardian entirely.
+
+if [[ "$COMMAND" =~ osascript ]] && ! [[ "$COMMAND" =~ osascript\.sh ]]; then
+    # Block inline AppleScript — "do shell script" is a full shell escape hatch
+    if [[ "$COMMAND" =~ osascript[[:space:]].*-e[[:space:]] ]] || [[ "$COMMAND" =~ osascript[[:space:]]+-e[[:space:]] ]]; then
+        block "APPLESCRIPT" "Inline osascript (-e) is blocked — use .applescript files in ~/MCPs/autopilot/applescripts/"
+    fi
+    # Block JXA — JavaScript for Automation can call ObjC/NSTask
+    if [[ "$COMMAND" =~ osascript[[:space:]].*-l[[:space:]]+(JavaScript|js) ]]; then
+        block "APPLESCRIPT" "JXA (JavaScript for Automation) is blocked — use standard AppleScript files"
+    fi
+    # Whitelist: only allow .applescript files from the approved directory
+    # Pattern requires: applescripts/ followed by a clean filename (no path traversal)
+    if ! [[ "$COMMAND" =~ osascript[[:space:]].*applescripts/[a-zA-Z0-9_-]+\.applescript ]]; then
+        block "APPLESCRIPT" "osascript is only allowed for .applescript files in ~/MCPs/autopilot/applescripts/"
+    fi
+fi
+
 # =============================================================================
 # TIER 3: CUSTOM RULES — single awk pass (< 2ms)
 # =============================================================================
