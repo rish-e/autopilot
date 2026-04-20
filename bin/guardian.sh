@@ -107,6 +107,17 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
     exit 0
 fi
 
+# ── MCP Tool Manifest Check: warn on unknown MCP tools (rug-pull detection) ──
+# A compromised or swapped MCP server may register new tools beyond its expected set.
+# Check the tool name prefix against config/mcp-tool-manifest.json on every MCP call.
+if [[ "$TOOL_NAME" == mcp__* ]]; then
+    _manifest="${AUTOPILOT_DIR:-$HOME/MCPs/autopilot}/config/mcp-tool-manifest.json"
+    if [ -f "$_manifest" ] && command -v jq &>/dev/null; then
+        _trusted=$(jq -r --arg t "$TOOL_NAME" '.trusted_prefixes[] | select($t | startswith(.))' "$_manifest" 2>/dev/null | head -1)
+        [ -z "$_trusted" ] && echo "GUARDIAN WARN [MCP_UNKNOWN]: \'$TOOL_NAME\' not in trusted manifest — possible rug-pull" >&2
+    fi
+fi
+
 # Only inspect Bash commands — allow everything else through
 if [ "$TOOL_NAME" != "Bash" ]; then
     exit 0
