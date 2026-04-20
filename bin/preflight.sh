@@ -323,6 +323,19 @@ cmd_check_all() {
         "$budget_sh" init 2>/dev/null || true
     fi
 
+    # Write autopilot git identity config (distinct from user's personal identity).
+    # Commits made by autopilot are clearly attributable in git log.
+    local git_config_dir="$HOME/.autopilot"
+    local git_config_file="$git_config_dir/gitconfig"
+    mkdir -p "$git_config_dir"
+    if [ ! -f "$git_config_file" ]; then
+        cat > "$git_config_file" <<'GITCFG'
+[user]
+    name = autopilot-bot
+    email = autopilot@autopilot.local
+GITCFG
+    fi
+
     # Check cache first
     if is_cache_valid && [ "$JSON_MODE" = "false" ]; then
         echo -e "${DIM}Preflight: using cached results ($(( $(date +%s) - $(stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0) ))s old)${NC}"

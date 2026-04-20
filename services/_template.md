@@ -11,6 +11,7 @@ auth_pattern: "{token-env | token-flag | cli-login | oauth | api-key-header}"
 mcp: "{installed | installable | none}"
 cli: "{tool-name | none}"
 rate_limits: "{free tier limits, e.g. 100 deploys/day}"
+tos_automated: "{allowed | restricted | unclear}"
 related_services: ["{other-service}"]
 decision_levels:
   read: 1

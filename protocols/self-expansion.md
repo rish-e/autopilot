@@ -115,6 +115,13 @@ When you encounter an unknown service mid-task:
       c. WebSearch: "{service} MCP server npm"
       If found and non-whitelisted → present to user for approval.
 5.  → Try OpenAPI auto-detection (check /openapi.json, /swagger.json, /api-docs)
+5.5 → ToS review (required for any new service):
+      WebFetch: https://{service-domain}/terms  (try /tos, /terms-of-service, /legal too)
+      Scan for: "automated", "bot", "scraping", "programmatic", "rate limit", "commercial use"
+      - If ToS explicitly PROHIBITS automated signups/bot access: flag to user before proceeding.
+      - If ToS ALLOWS or is SILENT on automation: proceed, note status in registry as
+        tos_automated: allowed | restricted | unclear
+      Do not block on "unclear" — just record it. Only pause if explicitly prohibited.
 6.  → WebSearch for "{service} CLI" and "{service} API docs"
 7.  → WebFetch the official documentation
 8.  → Create ~/MCPs/autopilot/services/{service}.md from template

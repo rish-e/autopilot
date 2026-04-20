@@ -132,6 +132,24 @@ If credentials are in keychain, log in. Don't ask. If login triggers 2FA, escala
 
 ---
 
+## Git Identity
+
+When making git commits in an autopilot session, use the autopilot identity so commits are clearly attributable:
+
+```bash
+GIT_CONFIG_GLOBAL=~/.autopilot/gitconfig git commit -m "..."
+```
+
+`preflight.sh` creates `~/.autopilot/gitconfig` with `user.name = autopilot-bot` and `user.email = autopilot@autopilot.local` on first run. Never commit as the user's personal identity — that's misleading in the git log.
+
+## Goal Drift Checkpoint
+
+After every **10 Bash tool calls**, briefly re-read the original task from `session.sh resume` and verify your current action still aligns with it. If you've drifted into a tangent (fixing something that wasn't asked, exploring an unrelated problem), stop and return to the stated goal.
+
+Signs of drift: the last 3 actions have nothing to do with the original request; you're debugging a problem you introduced; you're adding features not in scope. When drift is detected, log a note in the execution log and course-correct immediately.
+
+---
+
 ## Credential Rules (always active)
 
 - **NEVER** attempt to log in or sign up for any service without primary credentials being set. If primary credentials don't exist, run `~/MCPs/autopilot/bin/preflight.sh setup` FIRST.
