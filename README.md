@@ -4,6 +4,7 @@
   <img src="https://img.shields.io/badge/Safety-Guardian_Hook-red?style=for-the-badge" alt="Guardian" />
   <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT License" />
   <img src="https://img.shields.io/badge/Tests-55_passing-brightgreen?style=for-the-badge" alt="Tests" />
+  <img src="https://img.shields.io/badge/Security_Audit-35_Principles-orange?style=for-the-badge" alt="Security" />
 </p>
 
 <h1 align="center">Autopilot</h1>
@@ -13,7 +14,7 @@
 </p>
 
 <p align="center">
-  <em>Fully autonomous &bull; Self-expanding &bull; Browser automation &bull; Cross-platform &bull; Hard safety rails</em>
+  <em>Fully autonomous &bull; Self-expanding &bull; Browser automation &bull; Cross-platform &bull; Hard safety rails &bull; 35-principle security audit</em>
 </p>
 
 ---
@@ -132,24 +133,36 @@ The 5 pre-built service files are just a head start. Autopilot self-expands when
 ### Self-Expanding
 > Unknown service? Researches docs, creates registry file, installs CLI, adds safety rules, keeps going — all inline, no stopping.
 
-### Hard Safety Rails
+### Hard Safety Rails (35-Principle Audit)
 
 ```
   Command Entered
        |
        v
+  [Claude Code Sandbox]        kernel-enforced network allowlist
+       |                        filesystem denyRead (ssh, aws, gnupg...)
+       v
   [Guardian Hook]              exit code 2 = HARD BLOCK
        |                        (overrides all permissions)
-       |-- rm -rf / ?           BLOCKED
-       |-- bash -c "evil" ?     BLOCKED
-       |-- npm publish ?        BLOCKED
-       |-- git push --force ?   BLOCKED
-       |-- vercel --prod ?      BLOCKED
-       |-- DROP DATABASE ?      BLOCKED
-       |-- base64 | bash ?      BLOCKED
+       |-- rm -rf / ?           BLOCKED  [SYSTEM]
+       |-- bash -c "evil" ?     BLOCKED  [EVASION]
+       |-- npm publish ?        BLOCKED  [PUBLISHING]
+       |-- git push --force ?   BLOCKED  [GIT]
+       |-- vercel --prod ?      BLOCKED  [PRODUCTION]
+       |-- DROP DATABASE ?      BLOCKED  [DATABASE]
+       |-- base64 | bash ?      BLOCKED  [EVASION]
+       |-- pip install http:// ? BLOCKED [SUPPLY_CHAIN]
+       |-- hardcoded API key ?  BLOCKED  [SECRET_EXFIL]
+       |-- same cmd 3× ?        BLOCKED  [LOOP]
        |-- npm install ?        ALLOWED
        v
-  [Permission Allowlist]       auto-approve safe commands
+  [Content Sanitizer]          wraps web/tool output in UNTRUSTED_CONTENT
+       |                        strips 22 injection patterns + zero-width chars
+       v
+  [Memory Integrity]           SHA256 hash on every learned procedure
+       |                        tampered entries auto-quarantined
+       v
+  [Budget Cap]                 5 signups / $20 / 500 tool calls per session
        |
        v
   Command Executes (no prompt)
@@ -191,7 +204,17 @@ osascript.sh run clipboard set "text to paste"
     Sessions persist                Reconnects on start
 ```
 
-Three layers: (1) persistent Chrome via CDP, (2) auto-retry on tab crashes, (3) smart browser avoidance.
+Two modes:
+
+- **Persistent** (default, port 9222) — reuses sessions across tasks. Start once, stays running.
+- **Ephemeral** (port 9223) — fresh isolated profile per task, auto-wiped on stop. Used for signups, OAuth flows, and any task where prior browser state shouldn't carry over.
+
+```bash
+chrome-debug.sh ephemeral-start signup-task   # isolated profile
+chrome-debug.sh ephemeral-stop                # stop + wipe
+```
+
+Three layers: (1) persistent + ephemeral Chrome via CDP, (2) auto-retry on tab crashes, (3) smart browser avoidance.
 
 ### Decision Framework
 
@@ -356,6 +379,9 @@ On startup (Flow B), the agent checks for a saved session and offers to resume. 
     snapshot.sh            Snapshot & rollback (git stash wrapper, auto for L3+)
     session.sh             Session persistence (save/resume state)
     osascript.sh           Safe AppleScript runner (macOS only, whitelist-enforced)
+    content-sanitizer.sh   Injection defense — wraps external content, strips 22 patterns
+    budget.sh              Session spend cap (5 signups / $20 / 500 calls)
+    mcp-manifest-check.sh  MCP rug-pull detector (standalone PreToolUse hook)
   applescripts/            AppleScript playbooks (macOS GUI automation)
     app-control.applescript       Open / focus / quit / status apps
     handle-system-dialog.applescript  Click buttons on dialogs and sheets
@@ -366,6 +392,7 @@ On startup (Flow B), the agent checks for a saved session and offers to resume. 
     guardian-rules.yaml    Declarative safety rules (auditable, versioned)
     guardian-custom-rules.txt  Append-only blocklist (supplements YAML)
     trusted-mcps.yaml      MCP whitelist (20+ pre-vetted)
+    mcp-tool-manifest.json  Trusted MCP tool name prefixes (rug-pull detection)
     playwright-config.json  CDP endpoint config
   browser-profile/         Persistent browser sessions
   services/                Service registry (5 built-in + template)
@@ -387,7 +414,7 @@ your-project/.autopilot/
 <tr>
 <td width="50%">
 
-### What Gets Blocked (55 patterns)
+### What Gets Blocked (70+ patterns)
 
 | Category | Examples |
 |:---------|:---------|
@@ -400,7 +427,10 @@ your-project/.autopilot/
 | Financial | Stripe charges, sending emails |
 | MCP process termination | Targeting Playwright/MCP servers |
 | Obfuscation | `base64\|bash`, `bash -c`, `eval` |
-| AppleScript inline | `osascript -e`, JXA (`-l JavaScript`), non-whitelisted paths |
+| AppleScript inline | `osascript -e`, JXA, non-whitelisted paths |
+| Supply chain | `pip install http://…`, non-PyPI indexes |
+| Secret exfiltration | Hardcoded AWS/OpenAI/GitHub/Anthropic keys in network commands |
+| Stuck loops | Same command repeated 3× in a session |
 
 </td>
 <td width="50%">
@@ -409,9 +439,13 @@ your-project/.autopilot/
 
 | Layer | Can AI bypass? |
 |:------|:--------------|
+| Claude Code sandbox (kernel) | **No** — OS-enforced |
 | Guardian hook (shell script) | **No** — deterministic |
+| Content sanitizer | **No** — wraps all external input |
+| Memory integrity (SHA256) | **No** — detects poisoning |
+| Budget caps | **No** — halts session |
 | Permission allowlist | **No** — evaluated by Claude Code |
-| Decision framework | In theory — Guardian catches it |
+| MCP tool manifest | Warns — not hard-blocked |
 | Credential store | **No** — OS-level encryption |
 
 ### Autopilot-Scoped
