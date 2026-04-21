@@ -92,7 +92,7 @@ When creating a new service registry file, always check if an MCP exists for tha
 - **Never modify `guardian.sh`** — the built-in safety patterns are immutable
 - **Never remove lines from `guardian-custom-rules.txt`** — only append
 - **Never remove entries from `trusted-mcps.yaml`** — only add to `whitelisted` or `candidates`
-- **Never modify `settings.json` or `settings.local.json`** — permission changes need user
+- **Never directly edit `settings.json` or `settings.local.json`** — use `sandbox-allowlist.sh add <domain>` for network allowlist additions only; all other permission changes need user approval
 - **Never modify your own agent definition** (`autopilot.md`) — that's the user's domain
 - **Never weaken any existing safety rule** — expansion only makes things tighter
 - **Never install a non-whitelisted MCP without user approval**
@@ -129,6 +129,10 @@ When you encounter an unknown service mid-task:
 9.  → Auto-generate guardian rules from dangerous operations:
       Parse OpenAPI spec or docs for DELETE/PUT/destructive endpoints
       echo 'CATEGORY:::pattern:::reason' >> guardian-custom-rules.txt
+9.5 → Add service API domain to sandbox network allowlist:
+      Extract the API hostname(s) from the registry (e.g., api.newservice.com)
+      ~/MCPs/autopilot/bin/sandbox-allowlist.sh add api.{service-domain}
+      (idempotent — safe to run even if already present)
 10. → Install CLI if needed (mise-first: mise → brew → npm → curl)
 11. → Acquire credentials (browser-first — see Credential Acquisition Priority)
 12. → Continue with original task

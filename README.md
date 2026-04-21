@@ -72,6 +72,9 @@ Autopilot is a **general-purpose autonomous agent** — not limited to any speci
 | **Handle git** | Commits, branches, PRs, issues, Actions, releases |
 | **Browse the web** | Login to dashboards, fill forms, get API tokens |
 | **Control native apps** | Open/focus/quit macOS apps, click dialogs, read/write clipboard (AppleScript) |
+| **Run tasks in parallel** | Wave-based multi-agent execution — independent steps run simultaneously |
+| **Resume interrupted work** | Session save/resume — pick up mid-task after a rate limit or crash |
+| **Trigger from GitHub** | Webhook daemon — push/PR/CI events wake Autopilot automatically |
 | **Install tools** | CLIs, MCP servers, dependencies |
 | **Teach itself** | Unknown service? Researches docs, creates registry, installs CLI, keeps going |
 
@@ -133,6 +136,31 @@ The 5 pre-built service files are just a head start. Autopilot self-expands when
 ### Self-Expanding
 > Unknown service? Researches docs, creates registry file, installs CLI, adds safety rules, keeps going — all inline, no stopping.
 
+### Parallel Multi-Agent Execution
+
+> Independent steps don't wait for each other. Autopilot identifies parallel groups during planning and launches them as simultaneous subagents using the Agent tool and `lockfile.sh` for coordination.
+
+```
+Task: "Set up Supabase + configure Stripe + push to GitHub"
+       |
+       v
+  Planning: 3 independent services → 1 parallel wave
+       |
+       +─────────────────────────────+──────────────────────────+
+       v                             v                          v
+  [Agent: Supabase]          [Agent: Stripe]          [Agent: GitHub]
+  Create project              Get API keys             Push code
+  Run migrations              Configure webhook        Open PR
+  Store creds                 Store creds              done ✓
+  done ✓                      done ✓
+       |                             |                          |
+       +─────────────────────────────+──────────────────────────+
+       v
+  Wave complete → next wave (env vars, deploy)
+```
+
+The plan shows which steps are `[parallel wave N]`. Read `protocols/parallel-execution.md` for the full wave-based protocol.
+
 ### Hard Safety Rails (35-Principle Audit)
 
 ```
@@ -163,7 +191,8 @@ The 5 pre-built service files are just a head start. Autopilot self-expands when
        |                        tampered entries auto-quarantined
        v
   [Budget Cap]                 5 signups / $20 / 500 tool calls per session
-       |
+       |                        configurable via config/budget.conf
+       |                        on halt: saves session before stopping
        v
   Command Executes (no prompt)
 ```
@@ -394,6 +423,28 @@ On startup (Flow B), the agent checks for a saved session and offers to resume. 
 
 ---
 
+## Budget Caps (Configurable)
+
+Session spend limits are enforced by `budget.sh` and configurable per project via `config/budget.conf`:
+
+```bash
+# config/budget.conf — uncomment and adjust
+# MAX_SIGNUPS=5          # max new service account creations
+# MAX_COST_USD=20.0      # max estimated spend in USD
+# MAX_TOOL_CALLS=500     # max tool calls (loop guard)
+# WARN_COST_USD=10.0     # warn (but continue) at this spend
+```
+
+When a budget limit is hit, Autopilot saves the session before stopping so work can be resumed in a new session:
+
+```
+BUDGET HALT: Reached spend limit ($20.00/$20.00 estimated this session).
+ACTION REQUIRED: Run 'session.sh save "budget halt — cost"' to preserve progress,
+then start a new Claude Code session to continue.
+```
+
+---
+
 ## What's Included
 
 ```
@@ -414,7 +465,8 @@ On startup (Flow B), the agent checks for a saved session and offers to resume. 
     session.sh             Session persistence (save/resume state)
     osascript.sh           Safe AppleScript runner (macOS only, whitelist-enforced)
     content-sanitizer.sh   Injection defense — wraps external content, strips 22 patterns
-    budget.sh              Session spend cap (5 signups / $20 / 500 calls)
+    budget.sh              Session spend cap (configurable via budget.conf)
+    sandbox-allowlist.sh   Append-only manager for Claude Code sandbox network allowlist
     mcp-manifest-check.sh  MCP rug-pull detector (standalone PreToolUse hook)
     daemon-server.py        Webhook HTTP server (GitHub / generic POST triggers)
     daemon.sh              Daemon lifecycle manager (start/stop/status/trigger/setup)
@@ -430,6 +482,7 @@ On startup (Flow B), the agent checks for a saved session and offers to resume. 
     trusted-mcps.yaml      MCP whitelist (20+ pre-vetted)
     mcp-tool-manifest.json  Trusted MCP tool name prefixes (rug-pull detection)
     playwright-config.json  CDP endpoint config
+    budget.conf            Per-project spend cap overrides (gitignored template)
   browser-profile/         Persistent browser sessions
   services/                Service registry (5 built-in + template)
   commands/                /autopilot slash command
@@ -541,6 +594,10 @@ No interruption. Only pauses for 2FA codes and first-time primary credentials.
 | Autonomous deployment | Yes (CLI + browser) | Yes (sandbox) | Yes (VM) | Needs permission |
 | Browser credential acquisition | Yes (Playwright CDP) | Partial | Partial | No |
 | Hard safety rails | Yes (Guardian) | Sandbox only | Sandbox only | Permission prompts |
+| Parallel multi-agent execution | Yes (wave-based) | No | No | No |
+| Session save & resume | Yes | No | No | No |
+| GitHub webhook triggers | Yes (daemon) | Partial | No | No |
+| macOS GUI automation | Yes (AppleScript) | No | No | No |
 | Self-expanding knowledge | Yes | No | No | No |
 | MCP auto-discovery | Yes (whitelist) | No | Partial | No |
 | Credential vault | Yes (OS-native) | Session-scoped | VM-scoped | No |

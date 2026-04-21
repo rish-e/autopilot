@@ -18,13 +18,17 @@ set -uo pipefail
 AUTOPILOT_DIR="${AUTOPILOT_DIR:-$HOME/MCPs/autopilot}"
 BUDGET_FILE="${TMPDIR:-/tmp}/.autopilot-budget-${PPID}.json"
 
-# ─── Hard Limits ─────────────────────────────────────────────────────────────
+# ─── Hard Limits (defaults — overridden by config/budget.conf) ───────────────
 
 MAX_SIGNUPS=5          # Max new service account creations per session
 MAX_COST_USD=20.0      # Max estimated cumulative spend per session
 MAX_TOOL_CALLS=500     # Max tool calls per session (loop guard)
 WARN_COST_USD=10.0     # Warn (but continue) at this spend level
 WARN_SIGNUPS=3         # Warn at this many signups
+
+BUDGET_CONF="$AUTOPILOT_DIR/config/budget.conf"
+# shellcheck source=/dev/null
+[[ -f "$BUDGET_CONF" ]] && source "$BUDGET_CONF"
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -72,19 +76,20 @@ cmd_check() {
     # Hard limits — exit 2 to halt
     if [ "$signups" -ge "$MAX_SIGNUPS" ] 2>/dev/null; then
         echo "BUDGET HALT: Reached signup limit (${signups}/${MAX_SIGNUPS} service accounts created this session)." >&2
-        echo "This is a safety limit to prevent runaway account creation. Start a new session to continue." >&2
+        echo "ACTION REQUIRED: Run '~/MCPs/autopilot/bin/session.sh save \"budget halt — signups\"' to preserve progress, then start a new Claude Code session to continue." >&2
         exit 2
     fi
 
     if (( $(echo "$cost >= $MAX_COST_USD" | bc -l 2>/dev/null || echo 0) )); then
         echo "BUDGET HALT: Reached spend limit (\$${cost}/\$${MAX_COST_USD} estimated this session)." >&2
-        echo "This is a safety limit to prevent runaway costs. Start a new session to continue." >&2
+        echo "ACTION REQUIRED: Run '~/MCPs/autopilot/bin/session.sh save \"budget halt — cost\"' to preserve progress, then start a new Claude Code session to continue." >&2
         exit 2
     fi
 
     if [ "$tool_calls" -ge "$MAX_TOOL_CALLS" ] 2>/dev/null; then
         echo "BUDGET HALT: Reached tool call limit (${tool_calls}/${MAX_TOOL_CALLS} this session)." >&2
-        echo "This may indicate a loop. Check logs and start a new session." >&2
+        echo "ACTION REQUIRED: Run '~/MCPs/autopilot/bin/session.sh save \"budget halt — tool calls\"' to preserve progress, then start a new Claude Code session to continue." >&2
+        echo "NOTE: High tool call count may indicate a loop — review recent actions before resuming." >&2
         exit 2
     fi
 

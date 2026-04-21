@@ -4,6 +4,46 @@ All notable changes to Autopilot are documented here.
 
 ---
 
+## [3.5] — 2026-04-21 — Parallelism, Sandbox Allowlist, Budget Config, Chrome Status
+
+Four targeted fixes wired end-to-end.
+
+### Added
+
+**`bin/sandbox-allowlist.sh`** — append-only domain manager for the Claude Code sandbox network allowlist:
+- `add <domain>` — validates domain format (rejects shell injection), appends to `settings.json` idempotently
+- `list` — print all allowed domains sorted
+- `has <domain>` — exit 0 if present, 1 if not
+- Called automatically by `self-expansion.md` step 9.5 after new service registry creation
+
+**`config/budget.conf`** — per-project spend cap overrides:
+- Sourced by `budget.sh` at runtime via `source`
+- Commented-out defaults for `MAX_SIGNUPS`, `MAX_COST_USD`, `MAX_TOOL_CALLS`, `WARN_COST_USD`, `WARN_SIGNUPS`
+- Lets projects raise/lower limits without editing `budget.sh`
+
+### Changed
+
+**`bin/budget.sh`** — two improvements:
+- Loads `config/budget.conf` overrides via `source` (after setting defaults)
+- Halt messages now include explicit recovery instruction: `session.sh save "budget halt — <reason>"` + start new session. Previously the agent had no actionable path forward on budget halt.
+
+**`bin/preflight.sh`** — `check_chrome()` added to the parallel health-check block:
+- Reports Chrome status on port 9222 (running with version, or not running)
+- Never auto-starts Chrome — start-on-demand is handled by `browser-automation.md`
+- Both states report `status: ok` — "not running" is normal, not a failure
+
+**`protocols/self-expansion.md`** — two updates:
+- Step 9.5: call `sandbox-allowlist.sh add <api-domain>` after creating service registry and guardian rules
+- "Cannot do" list: clarified that `sandbox-allowlist.sh add` is the permitted path for network allowlist additions; direct settings.json edits still prohibited
+
+**`~/.claude/agents/autopilot.md`** — Flow B step 2 and 7 updated:
+- Step 2: explicitly identify parallel groups during analysis; read `parallel-execution.md` for wave-based pattern
+- Step 3: mark independent steps as `[parallel wave N]` in the plan
+- Step 7: launch parallel waves using Agent tool with lockfile.sh coordination
+- Key Paths: added `sandbox-allowlist.sh` and `budget.conf`
+
+---
+
 ## [3.4] — 2026-04-20 — Webhook Daemon
 
 Event-driven task triggering: Autopilot can now be woken by GitHub webhooks, direct HTTP calls, or any system that can POST JSON.

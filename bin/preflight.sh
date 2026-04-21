@@ -313,6 +313,20 @@ check_memory_db() {
     fi
 }
 
+check_chrome() {
+    # Status-only check — reports whether persistent Chrome is running on port 9222.
+    # Never starts Chrome here; browser-automation.md handles start-on-demand.
+    local response
+    response=$(curl -sf --max-time 2 http://127.0.0.1:9222/json/version 2>/dev/null || true)
+    if [[ -n "$response" ]]; then
+        local ver
+        ver=$(echo "$response" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('Browser','?'))" 2>/dev/null || echo "running")
+        echo "{\"check\":\"chrome\",\"status\":\"ok\",\"detail\":\"$ver — persistent session available\"}" > "$RESULTS_DIR/chrome"
+    else
+        echo '{"check":"chrome","status":"ok","detail":"not running — will start on demand when browser automation is needed"}' > "$RESULTS_DIR/chrome"
+    fi
+}
+
 # ─── Run All Checks ─────────────────────────────────────────────────────────
 
 cmd_check_all() {
@@ -355,6 +369,7 @@ GITCFG
     check_guardian &
     check_audit_integrity &
     check_memory_db &
+    check_chrome &
     wait
 
     # Collect results
